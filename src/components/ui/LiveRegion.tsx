@@ -2,18 +2,18 @@ import { useEffect, useState } from 'react';
 
 interface LiveRegionProps {
   children: React.ReactNode;
-  priority?: 'polite' | 'assertive';
-  'aria-atomic'?: boolean;
   clearAfter?: number;
+  'aria-live'?: 'polite' | 'assertive';
+  'aria-atomic'?: boolean;
 }
 
 export const LiveRegion: React.FC<LiveRegionProps> = ({
   children,
-  priority = 'polite',
-  'aria-atomic': atomic = true,
-  clearAfter
+  clearAfter,
+  'aria-live': ariaLive = 'polite',
+  'aria-atomic': ariaAtomic = true
 }) => {
-  const [content, setContent] = useState(children);
+  const [content, setContent] = useState<React.ReactNode>(children);
 
   useEffect(() => {
     setContent(children);
@@ -27,13 +27,11 @@ export const LiveRegion: React.FC<LiveRegionProps> = ({
     }
   }, [children, clearAfter]);
 
-  if (!content) return null;
-
   return (
     <div
       role="status"
-      aria-live={priority}
-      aria-atomic={atomic}
+      aria-live={ariaLive}
+      aria-atomic={ariaAtomic}
       className="sr-only"
     >
       {content}

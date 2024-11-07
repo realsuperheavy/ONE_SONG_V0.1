@@ -16,6 +16,11 @@ interface RollbackPoint {
   timestamp: number;
 }
 
+interface RollbackError extends Error {
+  code: string;
+  details?: Record<string, unknown>;
+}
+
 export class RollbackManager {
   private snapshots: Map<string, RollbackPoint>;
   private cache: Cache<RollbackPoint>;
@@ -87,8 +92,9 @@ export class RollbackManager {
         timestamp: Date.now()
       });
 
-    } catch (error) {
-      analyticsService.trackError(error as Error, {
+    } catch (err) {
+      const error = err as RollbackError;
+      analyticsService.trackError(error, {
         context: 'rollback_execution',
         version
       });
@@ -97,32 +103,13 @@ export class RollbackManager {
   }
 
   private async getCurrentState(): Promise<DeploymentState> {
-    const configSnapshot = await get(ref(rtdb, 'config'));
-    const featuresSnapshot = await get(ref(rtdb, 'features'));
-
-    return {
-      version: process.env.NEXT_PUBLIC_APP_VERSION!,
-      timestamp: Date.now(),
-      config: configSnapshot.val(),
-      features: Object.keys(featuresSnapshot.val() || {})
-    };
+    const snapshot = await get(ref(rtdb, 'deployment/state'));
+    return snapshot.val() as DeploymentState;
   }
 
   private async captureSnapshot(): Promise<Record<string, any>> {
-    const paths = [
-      'config',
-      'features',
-      'metadata'
-    ];
-
-    const snapshot: Record<string, any> = {};
-    
-    for (const path of paths) {
-      const dataSnapshot = await get(ref(rtdb, path));
-      snapshot[path] = dataSnapshot.val();
-    }
-
-    return snapshot;
+    const snapshot = await get(ref(rtdb, '/'));
+    return snapshot.val() || {};
   }
 
   private async verifySnapshot(rollbackPoint: RollbackPoint): Promise<void> {
@@ -198,5 +185,19 @@ export class RollbackManager {
   cleanup(): void {
     this.snapshots.clear();
     this.cache.clear();
+  }
+
+  private async validateRollback(version: string): Promise<boolean> {
+    try {
+      // Implementation
+      return true;
+    } catch (err) {
+      const error = err as Error;
+      analyticsService.trackError(error, {
+        context: 'rollback_validation',
+        version
+      });
+      return false;
+    }
   }
 } 

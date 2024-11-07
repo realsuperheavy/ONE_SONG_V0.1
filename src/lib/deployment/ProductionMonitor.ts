@@ -6,8 +6,15 @@ interface MonitoringMetrics {
   errorRate: number;
   responseTime: number;
   userCount: number;
-  memoryUsage: number;
   cpuUsage: number;
+  memoryUsage: number;
+}
+
+interface AlertConfig {
+  errorRateThreshold: number;
+  responseTimeThreshold: number;
+  cpuThreshold: number;
+  memoryThreshold: number;
 }
 
 export class ProductionMonitor {
@@ -18,6 +25,21 @@ export class ProductionMonitor {
     responseTime: 1000, // 1 second
     memoryUsage: 0.9, // 90%
     cpuUsage: 0.8 // 80%
+  };
+
+  private metrics: MonitoringMetrics = {
+    errorRate: 0,
+    responseTime: 0,
+    userCount: 0,
+    cpuUsage: 0,
+    memoryUsage: 0
+  };
+
+  private alertConfig: AlertConfig = {
+    errorRateThreshold: 0.05,
+    responseTimeThreshold: 1000,
+    cpuThreshold: 0.8,
+    memoryThreshold: 0.9
   };
 
   constructor() {
@@ -147,5 +169,47 @@ export class ProductionMonitor {
   cleanup(): void {
     this.metricsCache.clear();
     this.alertSystem.cleanup();
+  }
+
+  private async getErrorLogs(): Promise<Error[]> {
+    // Implementation
+    return [];
+  }
+
+  private async getTotalRequests(): Promise<number> {
+    // Implementation
+    return 0;
+  }
+
+  private async getResponseTimes(): Promise<number[]> {
+    // Implementation
+    return [];
+  }
+
+  private async getActiveUsers(): Promise<{size: number}> {
+    // Implementation
+    return {size: 0};
+  }
+
+  async checkHealth(): Promise<boolean> {
+    try {
+      await this.updateMetrics();
+      return this.isHealthy();
+    } catch (err) {
+      const error = err as Error;
+      analyticsService.trackError(error, {
+        context: 'production_monitor_health_check'
+      });
+      return false;
+    }
+  }
+
+  private isHealthy(): boolean {
+    return (
+      this.metrics.errorRate < this.alertConfig.errorRateThreshold &&
+      this.metrics.responseTime < this.alertConfig.responseTimeThreshold &&
+      this.metrics.cpuUsage < this.alertConfig.cpuThreshold &&
+      this.metrics.memoryUsage < this.alertConfig.memoryThreshold
+    );
   }
 } 

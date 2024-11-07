@@ -12,6 +12,20 @@ interface AdvancedDashboardProps {
   eventId: string;
 }
 
+interface RealTimeMetrics {
+  userActivity: Array<{timestamp: number; count: number}>;
+  responseLatency: Array<{endpoint: string; ms: number}>;
+  errorRates: Array<{type: string; count: number}>;
+}
+
+interface Alert {
+  id: string;
+  name: string;
+  description: string;
+  severity: 'info' | 'warning' | 'critical';
+  timestamp: number;
+}
+
 export const AdvancedDashboard: React.FC<AdvancedDashboardProps> = ({ eventId }) => {
   const [metrics, setMetrics] = useState<RealTimeMetrics | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
