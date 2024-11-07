@@ -1,0 +1,79 @@
+import { ref, push, update, remove, onValue, get, query, orderByChild, increment } from '@firebase/database';
+import { rtdb } from '../config';
+import { SongRequest } from '@/types/models';
+
+export const requestService = {
+  createRequest: async (request: Partial<SongRequest>) => {
+    const requestRef = ref(rtdb, `requests/${request.eventId}`);
+    const newRequest = {
+      ...request,
+      status: 'pending',
+      metadata: {
+        ...request.metadata,
+        requestTime: new Date().toISOString(),
+        votes: 0
+      }
+    };
+    
+    const newRequestRef = await push(requestRef, newRequest);
+    return newRequestRef.key;
+  },
+
+  updateRequest: async (requestId: string, updates: Partial<SongRequest>) => {
+    const requestRef = ref(rtdb, `requests/${updates.eventId}/${requestId}`);
+    await update(requestRef, updates);
+  },
+
+  deleteRequest: async (requestId: string, eventId: string) => {
+    const requestRef = ref(rtdb, `requests/${eventId}/${requestId}`);
+    await remove(requestRef);
+  },
+
+  voteRequest: async (requestId: string, eventId: string, userId: string) => {
+    const requestRef = ref(rtdb, `requests/${eventId}/${requestId}`);
+    const votesRef = ref(rtdb, `votes/${requestId}/${userId}`);
+    
+    const snapshot = await get(votesRef);
+    if (snapshot.exists()) {
+      throw new Error('User has already voted for this request');
+    }
+
+    const updates: { [key: string]: any } = {};
+    updates[`votes/${requestId}/${userId}`] = true;
+    updates[`requests/${eventId}/${requestId}/metadata/votes`] = increment(1);
+    
+    await update(ref(rtdb), updates);
+  },
+
+  subscribeToRequests: (eventId: string, callback: (requests: SongRequest[]) => void) => {
+    const requestsRef = query(
+      ref(rtdb, `requests/${eventId}`),
+      orderByChild('metadata/requestTime')
+    );
+
+    const unsubscribe = onValue(requestsRef, (snapshot) => {
+      const requests: SongRequest[] = [];
+      snapshot.forEach((childSnapshot) => {
+        requests.push({
+          id: childSnapshot.key!,
+          ...childSnapshot.val()
+        });
+      });
+      callback(requests);
+    });
+
+    return unsubscribe;
+  },
+
+  getRequest: async (requestId: string, eventId: string) => {
+    const requestRef = ref(rtdb, `requests/${eventId}/${requestId}`);
+    const snapshot = await get(requestRef);
+    if (!snapshot.exists()) {
+      throw new Error('Request not found');
+    }
+    return {
+      id: snapshot.key!,
+      ...snapshot.val()
+    } as SongRequest;
+  }
+}; 
