@@ -1,13 +1,12 @@
-import { FirebaseProvider } from '@/lib/firebase/FirebaseContext';
-import { AuthProvider } from '@/components/auth/AuthProvider';
-import { SpotifyProvider } from '@/lib/spotify/SpotifyContext';
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import './globals.css';
-import { useEffect } from 'react';
-import { registerServiceWorker } from '@/lib/serviceWorker/register';
 
-export const metadata = {
-  title: 'OneSong',
-  description: 'Real-time DJ song request platform',
+const inter = Inter({ subsets: ['latin'] });
+
+export const metadata: Metadata = {
+  title: 'OneSong - Connect DJs and Audiences',
+  description: 'Real-time music requests and queue management for DJs and events',
 };
 
 export default function RootLayout({
@@ -15,21 +14,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  useEffect(() => {
-    registerServiceWorker();
-  }, []);
-
   return (
     <html lang="en">
-      <body>
-        <FirebaseProvider>
-          <AuthProvider>
-            <SpotifyProvider>
-              {children}
-            </SpotifyProvider>
-          </AuthProvider>
-        </FirebaseProvider>
-      </body>
+      <body className={inter.className}>{children}</body>
     </html>
   );
 } 
