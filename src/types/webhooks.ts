@@ -112,6 +112,19 @@ export interface WebhookConfig {
     maxRequests: number;
     windowMs: number;
   };
+  retryConfig?: {
+    maxAttempts: number;
+    backoffMultiplier: number;
+    initialDelay: number;
+  };
+  monitoring?: {
+    enabled: boolean;
+    alertThresholds?: {
+      errorRate: number;
+      latency: number;
+      failureCount: number;
+    };
+  };
 }
 
 export interface WebhookDelivery {
@@ -124,4 +137,19 @@ export interface WebhookDelivery {
   error?: string;
   duration: number;
   timestamp: number;
+}
+
+export interface WebhookDeliveryStatus {
+  success: boolean;
+  statusCode?: number;
+  error?: string;
+  duration: number;
+  timestamp: number;
+}
+
+export interface WebhookMetrics {
+  successRate: number;
+  averageLatency: number;
+  errorRate: number;
+  deliveryCount: number;
 } 

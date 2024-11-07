@@ -1,6 +1,25 @@
-export type ContentType = 'message' | 'profile' | 'request';
-export type ActionType = 'warning' | 'mute' | 'ban';
-export type Severity = 'low' | 'medium' | 'high';
+export interface ReviewItem {
+  id: string;
+  contentType: 'message' | 'profile' | 'request' | 'comment';
+  data: any;
+  metadata?: Record<string, any>;
+}
+
+export interface ModerationResult {
+  approved: boolean;
+  flags: ModerationFlag[];
+  requiresReview: boolean;
+  severity?: ModerationSeverity;
+  metadata?: Record<string, any>;
+}
+
+export interface ModerationFlag {
+  type: string;
+  description: string;
+  severity: ModerationSeverity;
+}
+
+export type ModerationSeverity = 'low' | 'medium' | 'high' | 'critical';
 
 export interface ModerationAction {
   id: string;
@@ -12,14 +31,5 @@ export interface ModerationAction {
   duration?: number;
 }
 
-export interface ContentFlag {
-  type: string;
-  severity: Severity;
-  description: string;
-}
-
-export interface ModerationResult {
-  approved: boolean;
-  requiresReview: boolean;
-  flags: ContentFlag[];
-} 
+export type ActionType = 'warning' | 'mute' | 'ban';
+export type Severity = 'low' | 'medium' | 'high';

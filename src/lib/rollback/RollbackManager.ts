@@ -23,6 +23,13 @@ interface RollbackConfig {
   validateRollback: boolean;
 }
 
+interface RollbackResult {
+  success: boolean;
+  snapshotId: string;
+  timestamp: number;
+  operations: number;
+}
+
 export class RollbackManager {
   private cache: Cache<Snapshot>;
   private debugger: RealTimeDebugger;
@@ -77,7 +84,7 @@ export class RollbackManager {
     }
   }
 
-  async rollback(path: string, snapshotId: string): Promise<void> {
+  async rollback(path: string, snapshotId: string): Promise<RollbackResult> {
     try {
       // Get snapshot
       const snapshot = await this.getSnapshot(path, snapshotId);
@@ -85,7 +92,7 @@ export class RollbackManager {
 
       // Validate rollback if enabled
       if (this.config.validateRollback) {
-        await this.validateRollback(path, snapshot);
+        await this.validateRollback(path, snapshot.data);
       }
 
       // Create pre-rollback snapshot
@@ -106,6 +113,13 @@ export class RollbackManager {
         snapshotId,
         preRollbackId
       });
+
+      return {
+        success: true,
+        snapshotId,
+        timestamp: Date.now(),
+        operations: 0
+      };
 
     } catch (error) {
       analyticsService.trackError(error as Error, {
@@ -133,10 +147,10 @@ export class RollbackManager {
     });
   }
 
-  private async validateRollback(path: string, snapshot: Snapshot): Promise<void> {
+  private async validateRollback(path: string, data: any): Promise<boolean> {
     // Check data integrity
     const currentChecksum = await this.generateChecksum(path);
-    const snapshotChecksum = await this.generateChecksum(snapshot.data);
+    const snapshotChecksum = await this.generateChecksum(data);
     
     if (currentChecksum === snapshotChecksum) {
       throw new Error('Current state matches snapshot');
@@ -153,6 +167,8 @@ export class RollbackManager {
     if (diagnosis.severity === 'critical') {
       throw new Error('System health check failed');
     }
+
+    return true;
   }
 
   private async executeRollback(path: string, snapshot: Snapshot): Promise<void> {

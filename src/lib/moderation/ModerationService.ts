@@ -42,6 +42,14 @@ interface ModerationAction {
   expiresAt?: number;
 }
 
+// Add type for moderation result
+interface ModerationResult {
+  approved: boolean;
+  flags: Flag[];
+  requiresReview: boolean;
+  severity?: ContentRule['severity'];
+}
+
 export class ModerationService {
   private rules: Map<string, ContentRule>;
   private cache: Cache<ReviewItem>;
@@ -77,11 +85,7 @@ export class ModerationService {
     id: string;
     type: ReviewItem['contentType'];
     data: any;
-  }): Promise<{
-    approved: boolean;
-    flags: Flag[];
-    requiresReview: boolean;
-  }> {
+  }): Promise<ModerationResult> {
     const flags: Flag[] = [];
     let requiresReview = false;
 
@@ -128,7 +132,8 @@ export class ModerationService {
           this.rules.get(f.ruleId)?.action === 'block'
         )),
         flags,
-        requiresReview
+        requiresReview,
+        severity: this.getHighestSeverity(flags)
       };
 
     } catch (error) {

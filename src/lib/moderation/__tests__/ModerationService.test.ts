@@ -1,30 +1,26 @@
 import { ModerationService } from '../ModerationService';
 import { analyticsService } from '@/lib/firebase/services/analytics';
-import { Cache } from '@/lib/cache';
-import { ref, get, set, update, push } from 'firebase/database';
-import { rtdb } from '@/lib/firebase/config';
-import type { ContentType, ModerationAction } from '@/types/moderation';
+import type { ReviewItem, ModerationResult } from '@/types/moderation';
 
 // Mock dependencies
 vi.mock('@/lib/firebase/services/analytics');
-vi.mock('@/lib/cache');
-vi.mock('firebase/database');
-vi.mock('@/lib/firebase/config');
+
+interface MockData {
+  content: {
+    id: string;
+    type: ReviewItem['contentType'];
+    data: any;
+  };
+  expectedResult: ModerationResult;
+}
 
 describe('ModerationService', () => {
   let moderationService: ModerationService;
   
   const mockContent = {
     id: 'content1',
-    type: 'message' as ContentType,
+    type: 'message' as ReviewItem['contentType'],
     data: 'Test content'
-  };
-
-  const mockAction: Omit<ModerationAction, 'id' | 'createdAt'> = {
-    type: 'warning',
-    userId: 'user1',
-    reason: 'Test reason',
-    createdBy: 'mod1'
   };
 
   beforeEach(() => {
@@ -32,5 +28,5 @@ describe('ModerationService', () => {
     moderationService = new ModerationService();
   });
 
-  // ... rest of test code remains the same but with proper types
+  // Rest of test implementation...
 }); 

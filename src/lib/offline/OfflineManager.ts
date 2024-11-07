@@ -9,6 +9,12 @@ interface OfflineConfig {
   dbVersion: number;
 }
 
+interface SyncResult {
+  success: boolean;
+  error?: Error;
+  timestamp: number;
+}
+
 export class OfflineManager {
   private db: IDBPDatabase | null = null;
   private cache: Cache<any>;
@@ -116,14 +122,16 @@ export class OfflineManager {
     }
   }
 
-  private async processSyncQueue(): Promise<void> {
-    if (!this.isOnline || !this.syncQueue.size) return;
+  private async processSyncQueue(): Promise<SyncResult[]> {
+    const results: SyncResult[] = [];
+    if (!this.isOnline || !this.syncQueue.size) return results;
 
     const operations = Array.from(this.syncQueue.values());
     
     for (const operation of operations) {
       try {
-        await this.processOperation(operation);
+        const result = await this.processOperation(operation);
+        results.push(result);
         this.syncQueue.delete(operation.id);
         await this.db?.delete('requests', operation.id);
 
@@ -135,9 +143,10 @@ export class OfflineManager {
         await this.handleSyncError(operation, error as Error);
       }
     }
+    return results;
   }
 
-  private async processOperation(operation: QueuedOperation): Promise<void> {
+  private async processOperation(operation: QueuedOperation): Promise<SyncResult> {
     const registration = await navigator.serviceWorker.ready;
     
     if ('sync' in registration) {
@@ -146,6 +155,8 @@ export class OfflineManager {
       // Fallback for browsers without background sync
       await this.performSync(operation);
     }
+
+    return { success: true, timestamp: Date.now() };
   }
 
   private async performSync(operation: QueuedOperation): Promise<void> {
