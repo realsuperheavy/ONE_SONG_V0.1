@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, FC } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { authService } from '@/lib/firebase/services/auth';
+import { ComponentProps } from 'react';
 
 interface AuthFormProps {
   mode: 'login' | 'register';
-  onSuccess?: () => void;
+  onSuccess: () => void;
 }
 
-export function AuthForm({ mode, onSuccess }: AuthFormProps) {
+export const AuthForm: FC<AuthFormProps> = ({ mode, onSuccess }: AuthFormProps) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
