@@ -1,7 +1,10 @@
-import * as functions from 'firebase-functions';
-import * as admin from 'firebase-admin';
-import axios from 'axios';
-import * as crypto from 'crypto';
+import * as functions from "firebase-functions";
+import { onCall } from "firebase-functions/v2/https";
+import type { CallableRequest } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
+import axios, { isAxiosError } from "axios";
+import * as crypto from "crypto";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 
 interface WebhookPayload {
   eventType: string;
@@ -16,149 +19,163 @@ interface WebhookConfig {
   timeout: number;
 }
 
-const validateSignature = (payload: any, signature: string, secret: string): boolean => {
-  const hmac = crypto.createHmac('sha256', secret);
+interface WebhookRequest {
+  url: string;
+  payload: WebhookPayload;
+  timeout?: number;
+}
+
+const validateSignature = (
+  payload: Record<string, unknown>,
+  signature: string,
+  secret: string,
+): boolean => {
+  const hmac = crypto.createHmac("sha256", secret);
   const expectedSignature = hmac
     .update(JSON.stringify(payload))
-    .digest('hex');
+    .digest("hex");
   return crypto.timingSafeEqual(
     Buffer.from(signature),
-    Buffer.from(expectedSignature)
+    Buffer.from(expectedSignature),
   );
 };
 
 const logWebhookAttempt = async (
   webhookId: string,
   success: boolean,
-  details: any
+  details: Record<string, unknown>,
 ): Promise<void> => {
-  await admin.firestore().collection('webhookLogs').add({
+  await admin.firestore().collection("webhookLogs").add({
     webhookId,
     success,
     details,
-    timestamp: admin.firestore.FieldValue.serverTimestamp()
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
   });
 };
 
-export const sendWebhook = functions.https.onCall(async (data, context) => {
-  // Validate request
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
-      'unauthenticated',
-      'Must be authenticated to send webhooks'
-    );
-  }
-
-  const { url, payload, timeout = 30000 }: {
-    url: string;
-    payload: WebhookPayload;
-    timeout?: number;
-  } = data;
-
-  try {
-    // Get webhook config
-    const webhookConfig = await admin.firestore()
-      .collection('webhookConfigs')
-      .where('url', '==', url)
-      .limit(1)
-      .get();
-
-    if (webhookConfig.empty) {
+export const sendWebhook = onCall(
+  async (request: CallableRequest<WebhookRequest>) => {
+    // Validate request
+    if (!request.auth) {
       throw new functions.https.HttpsError(
-        'not-found',
-        'Webhook configuration not found'
+        "unauthenticated",
+        "Must be authenticated to send webhooks",
       );
     }
 
-    const config = webhookConfig.docs[0].data() as WebhookConfig;
+    const { url, payload, timeout = 30000 } = request.data;
+    let webhookConfigSnapshot;
 
-    // Validate signature
-    if (!validateSignature(
-      { eventType: payload.eventType, data: payload.data, timestamp: payload.timestamp },
-      payload.signature,
-      config.secret
-    )) {
-      throw new functions.https.HttpsError(
-        'permission-denied',
-        'Invalid webhook signature'
-      );
-    }
+    try {
+      // Get webhook config
+      webhookConfigSnapshot = await admin.firestore()
+        .collection("webhookConfigs")
+        .where("url", "==", url)
+        .limit(1)
+        .get();
 
-    // Send webhook
-    const response = await axios({
-      method: 'POST',
-      url: config.url,
-      data: payload,
-      timeout: config.timeout || timeout,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Webhook-Signature': payload.signature,
-        'User-Agent': 'OneSong-Webhook/1.0'
+      if (webhookConfigSnapshot.empty) {
+        throw new functions.https.HttpsError(
+          "not-found",
+          "Webhook configuration not found",
+        );
       }
-    });
 
-    // Log success
-    await logWebhookAttempt(webhookConfig.docs[0].id, true, {
-      statusCode: response.status,
-      responseTime: response.headers['x-response-time'],
-      payload
-    });
+      const config = webhookConfigSnapshot.docs[0].data() as WebhookConfig;
 
-    return {
-      success: true,
-      statusCode: response.status,
-      responseTime: response.headers['x-response-time']
-    };
-
-  } catch (error) {
-    // Log failure
-    await logWebhookAttempt(
-      webhookConfig?.docs[0]?.id || 'unknown',
-      false,
-      {
-        error: error.message,
-        code: error.code,
-        payload
+      // Validate signature
+      if (!validateSignature(
+        { eventType: payload.eventType, data: payload.data, timestamp: payload.timestamp },
+        payload.signature,
+        config.secret,
+      )) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Invalid webhook signature",
+        );
       }
-    );
 
-    if (axios.isAxiosError(error)) {
+      // Send webhook
+      const response = await axios({
+        method: "POST",
+        url: config.url,
+        data: payload,
+        timeout: config.timeout || timeout,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Webhook-Signature": payload.signature,
+          "User-Agent": "OneSong-Webhook/1.0",
+        },
+      });
+
+      // Log success
+      await logWebhookAttempt(webhookConfigSnapshot.docs[0].id, true, {
+        statusCode: response.status,
+        responseTime: response.headers["x-response-time"],
+        payload,
+      });
+
+      return {
+        success: true,
+        statusCode: response.status,
+        responseTime: response.headers["x-response-time"],
+      };
+    } catch (error: unknown) {
+      // Log failure
+      if (webhookConfigSnapshot) {
+        await logWebhookAttempt(
+          webhookConfigSnapshot.docs[0].id,
+          false,
+          {
+            error: error instanceof Error ? error.message : "Unknown error",
+            code: error instanceof Error && "code" in error ? error.code : undefined,
+            payload,
+          },
+        );
+      }
+
+      if (isAxiosError(error)) {
+        throw new functions.https.HttpsError(
+          "unavailable",
+          `Webhook delivery failed: ${error.message}`,
+          {
+            statusCode: error.response?.status,
+            responseData: error.response?.data,
+          },
+        );
+      }
+
       throw new functions.https.HttpsError(
-        'unavailable',
-        `Webhook delivery failed: ${error.message}`,
-        {
-          statusCode: error.response?.status,
-          responseData: error.response?.data
-        }
+        "internal",
+        `Webhook processing failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
-
-    throw new functions.https.HttpsError(
-      'internal',
-      `Webhook processing failed: ${error.message}`
-    );
-  }
-});
+  },
+);
 
 // Cleanup old webhook logs
-export const cleanupWebhookLogs = functions.pubsub
-  .schedule('every 24 hours')
-  .onRun(async () => {
+export const cleanupWebhookLogs = onSchedule(
+  {
+    schedule: "0 0 * * *", // every day at midnight
+    timeZone: "UTC",
+  },
+  async () => {
     const thirtyDaysAgo = admin.firestore.Timestamp.fromDate(
-      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
     );
 
     const snapshot = await admin.firestore()
-      .collection('webhookLogs')
-      .where('timestamp', '<', thirtyDaysAgo)
+      .collection("webhookLogs")
+      .where("timestamp", "<", thirtyDaysAgo)
       .get();
 
     const batch = admin.firestore().batch();
-    snapshot.docs.forEach(doc => {
+    snapshot.docs.forEach((doc) => {
       batch.delete(doc.ref);
     });
 
     await batch.commit();
-    
+
     functions.logger.info(`Cleaned up ${snapshot.size} webhook logs`);
-  }); 
+  },
+);
