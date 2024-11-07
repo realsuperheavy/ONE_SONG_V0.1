@@ -2,6 +2,8 @@ import { FirebaseProvider } from '@/lib/firebase/FirebaseContext';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import { SpotifyProvider } from '@/lib/spotify/SpotifyContext';
 import './globals.css';
+import { useEffect } from 'react';
+import { registerServiceWorker } from '@/lib/serviceWorker/register';
 
 export const metadata = {
   title: 'OneSong',
@@ -13,6 +15,10 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
+
   return (
     <html lang="en">
       <body>

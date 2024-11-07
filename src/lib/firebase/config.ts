@@ -1,61 +1,26 @@
-import { initializeApp, getApps, FirebaseApp } from '@firebase/app';
-import { getAuth } from '@firebase/auth';
-import { getFirestore } from '@firebase/firestore';
-import { getStorage } from '@firebase/storage';
-import { getAnalytics, isSupported } from '@firebase/analytics';
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import { getDatabase } from 'firebase/database';
+import { getAnalytics } from 'firebase/analytics';
 
-interface FirebaseConfig {
-  apiKey: string;
-  authDomain: string;
-  projectId: string;
-  storageBucket: string;
-  messagingSenderId: string;
-  appId: string;
-  measurementId: string;
-}
-
-const ENV_MAP = {
-  development: {
-    firebase: process.env.NEXT_PUBLIC_FIREBASE_CONFIG_DEV,
-    spotify: process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID_DEV
-  },
-  production: {
-    firebase: process.env.NEXT_PUBLIC_FIREBASE_CONFIG_PROD,
-    spotify: process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID_PROD
-  }
-};
-
-// Parse the Firebase config from environment variable
-const getFirebaseConfig = (): FirebaseConfig => {
-  const env = process.env.NODE_ENV || 'development';
-  const config = ENV_MAP[env as keyof typeof ENV_MAP].firebase;
-  
-  if (!config) {
-    throw new Error(`Firebase configuration not found for environment: ${env}`);
-  }
-
-  try {
-    return JSON.parse(config);
-  } catch (error) {
-    throw new Error('Invalid Firebase configuration format');
-  }
+const firebaseConfig = {
+  // Config will be loaded from environment variables
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
-let firebaseApp: FirebaseApp;
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
-if (!getApps().length) {
-  firebaseApp = initializeApp(getFirebaseConfig());
-}
+export const auth = getAuth(app);
+export const firestore = getFirestore(app);
+export const rtdb = getDatabase(app);
+export const analytics = getAnalytics(app);
 
-// Initialize Firebase services
-const auth = getAuth(firebaseApp);
-const db = getFirestore(firebaseApp);
-const storage = getStorage(firebaseApp);
-
-// Initialize Analytics only in browser environment
-const analytics = typeof window !== 'undefined' 
-  ? isSupported().then(yes => yes ? getAnalytics(firebaseApp) : null) 
-  : null;
-
-export { auth, db, storage, analytics }; 
+export default app;
