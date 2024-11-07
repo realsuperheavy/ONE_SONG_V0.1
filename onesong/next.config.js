@@ -1,6 +1,5 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   env: {
     NEXT_PUBLIC_FIREBASE_CONFIG_DEV: process.env.NEXT_PUBLIC_FIREBASE_CONFIG_DEV,
     NEXT_PUBLIC_FIREBASE_CONFIG_PROD: process.env.NEXT_PUBLIC_FIREBASE_CONFIG_PROD,
@@ -13,4 +12,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
