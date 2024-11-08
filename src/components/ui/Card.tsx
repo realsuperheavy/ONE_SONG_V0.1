@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { COMPONENTS, EFFECTS, INTERACTIONS } from '@/design/tokens';
+import { COMPONENTS, EFFECTS, ANIMATIONS, TYPOGRAPHY } from '@/design/tokens';
 import { useTouchInteraction } from '@/hooks/useTouchInteraction';
 import type { TouchEventHandler } from 'react';
 
@@ -33,22 +33,41 @@ export const Card: React.FC<CardProps> = ({
     })
   });
 
+  const handleTouchStart: TouchEventHandler<HTMLDivElement> = (e) => {
+    touchHandlers.onTouchStart();
+  };
+
+  const handleTouchEnd: TouchEventHandler<HTMLDivElement> = (e) => {
+    touchHandlers.onTouchEnd();
+  };
+
+  const handleTouchCancel: TouchEventHandler<HTMLDivElement> = (e) => {
+    touchHandlers.onTouchCancel();
+  };
+
   return (
     <div
       className={cn(
         COMPONENTS.card.base,
-        interactive && COMPONENTS.card.interactive,
-        elevated && COMPONENTS.card.elevated,
+        TYPOGRAPHY.body.base,
+        ANIMATIONS.transitions.base,
+        interactive && [
+          COMPONENTS.card.interactive,
+          ANIMATIONS.hover.scale
+        ],
+        elevated && [
+          COMPONENTS.card.elevated,
+          ANIMATIONS.hover.lift
+        ],
         gradient && "bg-gradient-to-b from-baseDark to-gradientDark",
-        interactive && INTERACTIONS.hover.scale,
         className
       )}
       role={interactive ? 'button' : 'article'}
       tabIndex={interactive ? 0 : undefined}
       aria-label={ariaLabel}
-      onTouchStart={(e) => touchHandlers.onTouchStart(e as unknown as TouchEvent)}
-      onTouchEnd={(e) => touchHandlers.onTouchEnd(e as unknown as TouchEvent)}
-      onTouchCancel={(e) => touchHandlers.onTouchCancel(e as unknown as TouchEvent)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchCancel}
     >
       {children}
     </div>

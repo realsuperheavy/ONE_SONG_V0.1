@@ -20,7 +20,12 @@ interface Alert {
   context?: Record<string, any>;
 }
 
-export class AlertSystem {
+export interface AlertSystem {
+  subscribe: (callback: (alerts: Alert[]) => void) => () => void;
+  unsubscribe: () => void;
+}
+
+export class AlertSystemImpl implements AlertSystem {
   private rules: Map<string, AlertRule>;
   private alerts: Alert[];
   private subscribers: Set<(alerts: Alert[]) => void>;
@@ -164,5 +169,9 @@ export class AlertSystem {
     this.alerts = [];
     this.subscribers.clear();
     this.cache.clear();
+  }
+
+  unsubscribe(): void {
+    this.subscribers.clear();
   }
 } 

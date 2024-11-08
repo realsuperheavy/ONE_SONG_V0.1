@@ -88,13 +88,13 @@ export const AdvancedDashboard: React.FC<AdvancedDashboardProps> = ({ eventId })
     updateInterval: 1000,
     cacheSize: 100,
     cacheTTL: 60000
-  }) as MetricsManager;
+  }) as unknown as MetricsManager;
 
-  const alertSystem = new AlertSystem() as AlertSystem;
+  const alertSystem = new AlertSystem();
 
   useEffect(() => {
     // Start tracking event metrics
-    analytics.trackEventMetrics(eventId);
+    analyticsService.trackEventMetrics(eventId);
 
     // Subscribe to real-time metrics
     const unsubscribeMetrics = metricsManager.subscribe((newMetrics: MetricsData) => {
@@ -115,7 +115,7 @@ export const AdvancedDashboard: React.FC<AdvancedDashboardProps> = ({ eventId })
     });
 
     return () => {
-      analytics.stopTracking(eventId);
+      analyticsService.stopTracking(eventId);
       unsubscribeMetrics();
       unsubscribeAlerts();
     };

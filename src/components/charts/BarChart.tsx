@@ -4,11 +4,21 @@ import { getChartColors } from '@/utils/charts';
 
 interface BarChartProps {
   data: ChartData[];
-  title?: string;
+  xAxis: string;
+  yAxis: string;
+  color: string;
+  height?: number;
   className?: string;
 }
 
-export function BarChart({ data, title, className = '' }: BarChartProps) {
+export const BarChart: React.FC<BarChartProps> = ({
+  data,
+  xAxis,
+  yAxis,
+  color,
+  height = 250,
+  className
+}) => {
   const colors = getChartColors(data.length);
 
   const config = {
@@ -16,7 +26,7 @@ export function BarChart({ data, title, className = '' }: BarChartProps) {
     data: {
       labels: data.map(item => item.label),
       datasets: [{
-        label: title || '',
+        label: xAxis,
         data: data.map(item => item.value),
         backgroundColor: colors.background,
         borderColor: colors.border,
@@ -28,7 +38,7 @@ export function BarChart({ data, title, className = '' }: BarChartProps) {
       maintainAspectRatio: false,
       plugins: {
         legend: {
-          display: !!title
+          display: !!xAxis
         },
         tooltip: {
           mode: 'index',
@@ -49,7 +59,7 @@ export function BarChart({ data, title, className = '' }: BarChartProps) {
   return (
     <BaseChart 
       config={config} 
-      className={`h-64 ${className}`}
+      className={`h-${height} ${className}`}
     />
   );
-} 
+}; 

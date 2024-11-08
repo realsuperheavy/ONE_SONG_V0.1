@@ -2,8 +2,9 @@ import admin from 'firebase-admin';
 import { getApps } from 'firebase-admin/app';
 import { 
   getFirestore,
-  QueryDocumentSnapshot,
-  DocumentData 
+  type DocumentSnapshot,
+  type QueryDocumentSnapshot,
+  type DocumentData
 } from 'firebase-admin/firestore';
 import type { 
   WebhookEventType,

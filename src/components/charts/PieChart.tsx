@@ -4,25 +4,27 @@ import { getChartColors } from '@/utils/charts';
 
 interface PieChartProps {
   data: ChartData[];
-  title?: string;
+  labelKey: string;
+  valueKey: string;
+  colors: string[];
+  height?: number;
   className?: string;
-  doughnut?: boolean;
 }
 
-export function PieChart({ 
-  data, 
-  title, 
-  className = '',
-  doughnut = false 
-}: PieChartProps) {
-  const colors = getChartColors(data.length);
-
+export const PieChart: React.FC<PieChartProps> = ({
+  data,
+  labelKey,
+  valueKey,
+  colors,
+  height = 250,
+  className
+}) => {
   const config = {
-    type: doughnut ? 'doughnut' : 'pie',
+    type: 'pie',
     data: {
-      labels: data.map(item => item.label),
+      labels: data.map(item => item[labelKey]),
       datasets: [{
-        data: data.map(item => item.value),
+        data: data.map(item => item[valueKey]),
         backgroundColor: colors.map(c => c.background),
         borderColor: colors.map(c => c.border),
         borderWidth: 1
@@ -40,8 +42,8 @@ export function PieChart({
           }
         },
         title: {
-          display: !!title,
-          text: title || ''
+          display: true,
+          text: 'Pie Chart'
         }
       }
     }
@@ -50,7 +52,7 @@ export function PieChart({
   return (
     <BaseChart 
       config={config} 
-      className={`h-64 ${className}`}
+      className={`h-${height} ${className}`}
     />
   );
-} 
+}; 
