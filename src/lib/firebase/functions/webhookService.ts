@@ -1,11 +1,6 @@
 import admin from 'firebase-admin';
 import { getApps } from 'firebase-admin/app';
-import { 
-  getFirestore,
-  type DocumentSnapshot,
-  type QueryDocumentSnapshot,
-  type DocumentData
-} from 'firebase-admin/firestore';
+import { getFirestore } from 'firebase-admin/firestore';
 import type { 
   WebhookEventType,
   WebhookConfig,
@@ -27,6 +22,11 @@ if (!getApps().length) {
 const db = getFirestore();
 
 export class WebhookService {
+  /**
+   * Gets all active webhooks for a given event type
+   * @param eventType The type of event to get webhooks for
+   * @returns Array of webhook configurations that are enabled and listening for this event
+   */
   private async getActiveWebhooks(eventType: WebhookEventType): Promise<WebhookConfig[]> {
     const snapshot = await db
       .collection('webhooks')
@@ -34,7 +34,7 @@ export class WebhookService {
       .where('events', 'array-contains', eventType)
       .get();
 
-    return snapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => {
+    return snapshot.docs.map((doc: FirebaseFirestore.QueryDocumentSnapshot) => {
       const data = doc.data();
       return data as WebhookConfig;
     });
@@ -42,4 +42,4 @@ export class WebhookService {
 }
 
 // Export a singleton instance
-export const webhookService = new WebhookService(); 
+export const webhookService = new WebhookService();
