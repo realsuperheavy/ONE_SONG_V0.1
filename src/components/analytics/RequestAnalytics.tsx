@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAnalyticsStore } from '@/store/analytics';
 import { BarChart, LineChart, PieChart } from '@/components/charts';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
-import { Card } from '@/components/ui/Card';
-import { Spinner } from '@/components/ui/Spinner';
+import { Card } from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
 
 interface RequestAnalyticsProps {
   eventId: string;

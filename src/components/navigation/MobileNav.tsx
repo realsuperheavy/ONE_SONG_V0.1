@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ANIMATIONS, EFFECTS } from '@/design/tokens';
 import { useTheme } from '@/providers/ThemeProvider';
-import { Button } from '../ui/Button';
+import { Button } from '../ui/button';
 
 export const MobileNav: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);

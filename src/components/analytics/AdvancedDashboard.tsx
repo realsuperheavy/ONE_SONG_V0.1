@@ -5,7 +5,7 @@ import { AlertSystemImpl, type Alert } from '@/lib/analytics/AlertSystem';
 import { LineChart } from '../charts/LineChart';
 import { BarChart } from '../charts/BarChart';
 import { PieChart } from '../charts/PieChart';
-import { Card } from '../ui/Card';
+import { Card } from '../ui/card';
 import { analyticsService } from '@/lib/firebase/services/analytics';
 import { cn } from '@/lib/utils';
 import { transformChartData } from '@/utils/charts';

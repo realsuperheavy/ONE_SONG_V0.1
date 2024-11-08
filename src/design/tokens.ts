@@ -256,7 +256,6 @@ export const ACCESSIBILITY = {
   }
 };
 
-// Add missing UI Patterns
 export const UI_PATTERNS = {
   navigation: {
     top: {
@@ -284,7 +283,6 @@ export const UI_PATTERNS = {
   }
 };
 
-// Add Form Patterns
 export const FORM_PATTERNS = {
   input: {
     wrapper: "relative",
@@ -301,7 +299,6 @@ export const FORM_PATTERNS = {
   }
 };
 
-// Add Loading Patterns
 export const LOADING_PATTERNS = {
   skeleton: {
     base: "animate-pulse bg-background-elevated rounded",
@@ -328,7 +325,6 @@ export const LOADING_PATTERNS = {
   }
 };
 
-// Add Media Patterns
 export const MEDIA_PATTERNS = {
   image: {
     base: "object-cover",
@@ -351,7 +347,6 @@ export const MEDIA_PATTERNS = {
   }
 };
 
-// Add Status Indicators
 export const STATUS_INDICATORS = {
   badge: {
     base: "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
@@ -370,4 +365,4 @@ export const STATUS_INDICATORS = {
       info: "bg-state-info-base",
     }
   }
-}; 
+};

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { Alert } from '@/components/ui/Alert';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Alert } from '@/components/ui/alert';
 import { webhookService } from '@/lib/webhooks/config';
 import { LineChart, BarChart } from '@/components/ui/Charts';
 import { formatDistanceToNow } from 'date-fns';

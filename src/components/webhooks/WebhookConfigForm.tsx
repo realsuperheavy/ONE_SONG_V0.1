@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/Input';
-import { Card } from '@/components/ui/Card';
-import { Alert } from '@/components/ui/Alert';
+import { Card } from '@/components/ui/card';
+import { Alert } from '@/components/ui/alert';
 import { webhookService } from '@/lib/webhooks/config';
 import { WebhookEventType } from '@/types/webhooks';
 import { analyticsService } from '@/lib/firebase/services/analytics';

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Button } from '../ui/Button';
+import { Button } from '../ui/button';
 import { Slider } from '../ui/Slider';
 import { AdvancedPlaybackController } from '@/lib/playback/AdvancedPlaybackController';
 import { QueueManager } from '@/lib/queue/QueueManager';

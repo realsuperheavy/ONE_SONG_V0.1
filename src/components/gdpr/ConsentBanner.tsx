@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
 import { GDPRDataManager } from '@/lib/gdpr/DataManager';
 import { analyticsService } from '@/lib/firebase/services/analytics';
 

@@ -24,9 +24,7 @@ export const AuthForm: FC<AuthFormProps> = ({ mode, onSuccess }: AuthFormProps) 
 
     try {
       if (mode === 'register') {
-        await authService.signUp(email, password, {
-          profile: { displayName: name }
-        });
+        await authService.signUp(email, password);
       } else {
         await authService.signIn(email, password);
       }

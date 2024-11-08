@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
 import { GDPRDataManager } from '@/lib/gdpr/DataManager';
 import { ConsentBanner } from './ConsentBanner';
 import { useAuth } from '@/hooks/useAuth';
 import { analyticsService } from '@/lib/firebase/services/analytics';
-import { toast } from '../ui/Toast';
+import { toast } from '../ui/toast';
 
 export const PrivacyCenter: React.FC = () => {
   const { user } = useAuth();

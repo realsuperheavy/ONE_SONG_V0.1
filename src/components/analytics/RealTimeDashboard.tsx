@@ -4,9 +4,9 @@ import { BarChart } from '../charts/BarChart';
 import { PieChart } from '../charts/PieChart';
 import { RealTimeMetrics } from '@/lib/analytics/RealTimeMetrics';
 import { analyticsService } from '@/lib/firebase/services/analytics';
-import { Alert } from '../ui/Alert';
-import { Card } from '../ui/Card';
-import { Badge } from '../ui/Badge';
+import { Alert } from '../ui/alert';
+import { Card } from '../ui/card';
+import { Badge } from '../ui/badge';
 import { useRealTimeData } from '@/hooks/useRealTimeData';
 
 interface RealTimeDashboardProps {
