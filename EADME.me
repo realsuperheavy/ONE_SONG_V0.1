@@ -1,0 +1,160 @@
+# OneSong - Interactive Music Request Platform
+
+OneSong is a real-time music request platform that connects DJs with event attendees, creating an interactive and engaging music experience. Built with React, TypeScript, and Firebase, it features a modern, responsive design using Tailwind CSS and shadcn/ui components.
+
+![OneSong](https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=60)
+
+## Features
+
+- 🎵 Real-time song requests and queue management
+- 🎧 DJ dashboard with event controls and analytics
+- 👥 Interactive attendee experience
+- 💰 Built-in tipping system
+- 📱 Mobile-responsive design
+- 🎨 Beautiful UI with dark mode support
+- 🔒 Secure authentication system
+- 📊 Real-time analytics and insights
+
+## Project Structure
+
+### Core Application Files
+- `src/App.tsx` - Main application component handling routing and global providers
+- `src/main.tsx` - Application entry point that sets up React and renders the root component
+- `vite.config.ts` - Vite configuration for build and development settings
+
+### Feature Directories
+
+#### Components
+- `components/attendee/` - Attendee-specific views and features
+  - `dashboard/` - Main attendee interface components
+  - `event-list.tsx` - Displays available events
+- `components/dj/` - DJ-specific components
+  - `dashboard/` - DJ control panel and management
+  - `auth/` - DJ authentication components
+- `components/music/` - Shared music-related components
+  - `track-list.tsx` - Reusable track listing component
+  - `audio-preview.tsx` - Song preview player
+- `components/status/` - System status indicators
+- `components/venue/` - Venue selection and management
+
+#### Hooks
+- `hooks/use-real-time-queue.ts` - Real-time queue management
+- `hooks/use-real-time-requests.ts` - Real-time request handling
+- `hooks/use-spotify-search.ts` - Spotify search integration
+- `hooks/use-auth.ts` - Authentication state management
+- `hooks/use-websocket.ts` - WebSocket connection management
+
+#### Services/Libraries
+- `lib/firebase/` - Firebase configuration and services
+  - `models/` - Firestore data models
+  - `auth/` - Authentication services
+- `lib/spotify/` - Spotify API integration
+- `lib/websocket/` - WebSocket client implementation
+- `lib/location/` - Location services for venue finding
+
+#### Providers
+- `providers/auth-provider.tsx` - Authentication context provider
+- `providers/service-provider.tsx` - Service initialization and management
+- `providers/firebase-provider.tsx` - Firebase context provider
+
+#### Types
+- `types/event.ts` - Event-related type definitions
+- `types/track.ts` - Music track type definitions
+
+### Key Relationships
+
+#### Data Flow
+```
+Firebase/Spotify APIs → Services → Hooks → Components → UI
+```
+
+#### Real-time Updates
+```
+WebSocket → Real-time Hooks → Components → UI Updates
+```
+
+#### Authentication Flow
+```
+Auth Provider → Protected Routes → Feature Components
+```
+
+#### Event Management
+```
+DJ Dashboard → Event Creation → Attendee Join → Request System
+```
+
+### Architecture Overview
+
+The application follows a modular architecture where:
+- Components are split by feature domain (DJ, Attendee, Music)
+- Business logic is separated into hooks and services
+- Real-time functionality is handled through WebSocket and Firebase
+- UI components are built using shadcn/ui library
+- State management is handled through React Context and custom hooks
+
+This structure allows for:
+- Easy feature isolation and testing
+- Clear separation of concerns
+- Scalable real-time functionality
+- Reusable components across different parts of the application
+- Maintainable codebase with clear responsibilities
+
+## Tech Stack
+
+- React 18
+- TypeScript
+- Vite
+- Tailwind CSS
+- shadcn/ui Components
+- Firebase (Auth & Firestore)
+- Spotify API Integration
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18 or higher
+- npm or yarn
+- Firebase account
+- Spotify Developer account
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/onesong.git
+   cd onesong
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Create a `.env` file in the root directory with your API keys:
+   ```env
+   VITE_SPOTIFY_CLIENT_ID=your_spotify_client_id
+   VITE_SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+   VITE_GOOGLE_PLACES_API_KEY=your_google_places_api_key
+   ```
+
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+The app will be available at `http://localhost:5173`
+
+### Building for Production
+
+```bash
+npm run build
+```
+
+## License
+
+## Contact
+
+Your Name - [@yourusername](https://twitter.com/yourusername)
+
+Project Link: [https://github.com/yourusername/onesong](https://github.com/yourusername/onesong)
