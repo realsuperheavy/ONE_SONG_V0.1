@@ -254,4 +254,120 @@ export const ACCESSIBILITY = {
     base: "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary-base",
     negative: "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-state-error-base",
   }
+};
+
+// Add missing UI Patterns
+export const UI_PATTERNS = {
+  navigation: {
+    top: {
+      base: "fixed top-0 w-full z-sticky backdrop-blur-md",
+      active: "border-b-2 border-brand-primary-base",
+      glass: "bg-background-base/80",
+    },
+    tabs: {
+      list: "flex space-x-2 p-1 bg-background-elevated rounded-lg",
+      tab: "px-4 py-2 rounded-md transition-all duration-200",
+      active: "bg-brand-primary-base text-white",
+      inactive: "text-text-secondary hover:text-text-primary hover:bg-background-base/50",
+    }
+  },
+  modal: {
+    overlay: "fixed inset-0 bg-background-overlay backdrop-blur-md z-modal",
+    content: {
+      base: "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md z-modal",
+      mobile: "bottom-0 left-0 right-0 translate-y-0 rounded-t-xl",
+      animation: "animate-modal-enter",
+    },
+    payment: {
+      badge: "flex items-center space-x-2 text-state-success-base bg-state-success-background px-3 py-1 rounded-full",
+    }
+  }
+};
+
+// Add Form Patterns
+export const FORM_PATTERNS = {
+  input: {
+    wrapper: "relative",
+    field: "w-full bg-background-base border border-border-default rounded-lg px-4 py-2 transition-all duration-200",
+    label: "absolute -top-2 left-2 px-1 text-sm bg-background-base text-text-secondary",
+    focus: "focus:border-brand-primary-base focus:ring-2 focus:ring-brand-primary-base/20",
+    error: "border-state-error-base focus:border-state-error-base focus:ring-state-error-base/20",
+    disabled: "opacity-50 cursor-not-allowed",
+  },
+  validation: {
+    error: "text-sm text-state-error-base mt-1",
+    success: "text-sm text-state-success-base mt-1",
+    helper: "text-sm text-text-secondary mt-1",
+  }
+};
+
+// Add Loading Patterns
+export const LOADING_PATTERNS = {
+  skeleton: {
+    base: "animate-pulse bg-background-elevated rounded",
+    text: "h-4 w-3/4",
+    circle: "rounded-full",
+    card: "w-full h-32",
+  },
+  spinner: {
+    base: "animate-spin",
+    sizes: {
+      sm: "w-4 h-4",
+      md: "w-6 h-6",
+      lg: "w-8 h-8",
+    },
+    colors: {
+      brand: "text-brand-primary-base",
+      white: "text-white",
+    }
+  },
+  progress: {
+    base: "relative h-2 bg-background-elevated rounded-full overflow-hidden",
+    bar: "absolute left-0 top-0 h-full bg-brand-primary-base transition-all duration-200",
+    indeterminate: "animate-progress-indeterminate",
+  }
+};
+
+// Add Media Patterns
+export const MEDIA_PATTERNS = {
+  image: {
+    base: "object-cover",
+    rounded: "rounded-lg",
+    aspect: {
+      square: "aspect-square",
+      video: "aspect-video",
+      portrait: "aspect-[3/4]",
+    },
+    loading: "animate-pulse bg-background-elevated",
+  },
+  avatar: {
+    base: "rounded-full overflow-hidden",
+    sizes: {
+      sm: "w-8 h-8",
+      md: "w-12 h-12",
+      lg: "w-16 h-16",
+    },
+    group: "flex -space-x-2",
+  }
+};
+
+// Add Status Indicators
+export const STATUS_INDICATORS = {
+  badge: {
+    base: "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+    success: "bg-state-success-background text-state-success-base",
+    error: "bg-state-error-background text-state-error-base",
+    warning: "bg-state-warning-background text-state-warning-base",
+    info: "bg-state-info-background text-state-info-base",
+  },
+  dot: {
+    base: "relative flex h-3 w-3",
+    pulse: "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+    colors: {
+      success: "bg-state-success-base",
+      error: "bg-state-error-base",
+      warning: "bg-state-warning-base",
+      info: "bg-state-info-base",
+    }
+  }
 }; 
