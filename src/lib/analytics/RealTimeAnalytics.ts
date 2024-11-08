@@ -5,6 +5,14 @@ import { AlertSystem } from './AlertSystem';
 import { Cache } from '@/lib/cache';
 import { analyticsService } from '@/lib/firebase/services/analytics';
 
+export interface RealTimeAnalyticsConfig {
+  updateInterval?: number;
+  metricsManager: CustomMetricsManager;
+  alertSystem: AlertSystem;
+  maxRetries?: number;
+  batchSize?: number;
+}
+
 export class RealTimeAnalytics {
   private metricsManager: CustomMetricsManager;
   private alertSystem: AlertSystem;
@@ -13,11 +21,7 @@ export class RealTimeAnalytics {
   private updateInterval: number;
   private readonly BATCH_SIZE = 100;
 
-  constructor(config: {
-    metricsManager: CustomMetricsManager;
-    alertSystem: AlertSystem;
-    updateInterval?: number;
-  }) {
+  constructor(config: RealTimeAnalyticsConfig) {
     this.metricsManager = config.metricsManager;
     this.alertSystem = config.alertSystem;
     this.cache = new Cache({ maxSize: 1000, ttl: 5 * 60 * 1000 }); // 5 minutes

@@ -1,3 +1,16 @@
+import type { ChartData } from "@/types/charts";
+
+export const transformChartData = <T extends Record<string, any>>(
+  data: T[],
+  labelKey: keyof T,
+  valueKey: keyof T
+): ChartData[] => {
+  return data.map((item) => ({
+    label: String(item[labelKey]),
+    value: Number(item[valueKey])
+  }));
+};
+
 interface ChartColor {
   background: string;
   border: string;

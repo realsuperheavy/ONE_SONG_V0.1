@@ -33,15 +33,15 @@ export const Card: React.FC<CardProps> = ({
     })
   });
 
-  const handleTouchStart: TouchEventHandler<HTMLDivElement> = (e) => {
-    touchHandlers.onTouchStart();
+  const handleTouchStart: TouchEventHandler<HTMLDivElement> = (event) => {
+    touchHandlers.onTouchStart(event.nativeEvent);
   };
 
-  const handleTouchEnd: TouchEventHandler<HTMLDivElement> = (e) => {
-    touchHandlers.onTouchEnd();
+  const handleTouchEnd: TouchEventHandler<HTMLDivElement> = (event) => {
+    touchHandlers.onTouchEnd(event.nativeEvent);
   };
 
-  const handleTouchCancel: TouchEventHandler<HTMLDivElement> = (e) => {
+  const handleTouchCancel: TouchEventHandler<HTMLDivElement> = () => {
     touchHandlers.onTouchCancel();
   };
 

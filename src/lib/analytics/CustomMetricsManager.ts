@@ -13,6 +13,10 @@ interface CustomMetric {
   retention: number; // In milliseconds
 }
 
+export interface MetricsUpdateCallback<T> {
+  (metrics: T): void;
+}
+
 export class CustomMetricsManager {
   private metrics: Map<string, CustomMetric>;
   private cache: Cache<number[]>;
@@ -148,5 +152,13 @@ export class CustomMetricsManager {
         console.error(`Failed to retry batch ${key}:`, error);
       }
     }
+  }
+
+  subscribe<T>(callback: MetricsUpdateCallback<T>): () => void {
+    // ... implementation
+  }
+
+  onMetricsUpdate<T>(callback: MetricsUpdateCallback<T>): () => void {
+    return this.subscribe(callback);
   }
 } 

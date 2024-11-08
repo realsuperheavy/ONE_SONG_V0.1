@@ -1,30 +1,16 @@
 import { useState, useEffect } from 'react';
-import { RealTimeAnalytics } from '@/lib/analytics/RealTimeAnalytics';
+import { RealTimeAnalytics, type RealTimeAnalyticsConfig } from '@/lib/analytics/RealTimeAnalytics';
 import { CustomMetricsManager } from '@/lib/analytics/CustomMetricsManager';
-import { AlertSystem } from '@/lib/analytics/AlertSystem';
+import { AlertSystemImpl, type Alert } from '@/lib/analytics/AlertSystem';
 import { LineChart } from '../charts/LineChart';
 import { BarChart } from '../charts/BarChart';
 import { PieChart } from '../charts/PieChart';
 import { Card } from '../ui/Card';
 import { analyticsService } from '@/lib/firebase/services/analytics';
 import { cn } from '@/lib/utils';
+import { transformChartData } from '@/utils/charts';
 
-interface AdvancedDashboardProps {
-  eventId: string;
-}
-
-interface ChartProps {
-  data: any[];
-  xAxis: string;
-  yAxis: string;
-  color: string;
-  height?: number;
-}
-
-interface ChartData {
-  label: string;
-  value: number;
-}
+type AlertSeverity = "info" | "warning" | "critical";
 
 interface MetricsData {
   requestRate: Array<{time: string; requests: number}>;
@@ -34,51 +20,9 @@ interface MetricsData {
   errorRates: Array<{type: string; count: number}>;
 }
 
-interface Alert {
-  id: string;
-  name: string;
-  description: string;
-  severity: "info" | "warning" | "critical";
-  timestamp: number;
+interface AdvancedDashboardProps {
+  eventId: string;
 }
-
-// Add proper types for chart components
-interface LineChartProps {
-  data: ChartData[];
-  xAxis: string;
-  yAxis: string;
-  color: string;
-}
-
-interface BarChartProps {
-  data: ChartData[];
-  xAxis: string;
-  yAxis: string;
-  color: string;
-}
-
-interface PieChartProps {
-  data: ChartData[];
-  labelKey: string;
-  valueKey: string;
-  colors: string[];
-}
-
-// Add proper types for metrics manager
-interface MetricsManager {
-  subscribe: (callback: (metrics: MetricsData) => void) => () => void;
-}
-
-interface AlertSystem {
-  subscribe: (callback: (alerts: Alert[]) => void) => () => void;
-}
-
-const transformToChartData = (data: any[], labelKey: string, valueKey: string): ChartData[] => {
-  return data.map(item => ({
-    label: item[labelKey],
-    value: item[valueKey]
-  }));
-};
 
 export const AdvancedDashboard: React.FC<AdvancedDashboardProps> = ({ eventId }) => {
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
@@ -86,18 +30,24 @@ export const AdvancedDashboard: React.FC<AdvancedDashboardProps> = ({ eventId })
   
   const metricsManager = new CustomMetricsManager({
     updateInterval: 1000,
-    cacheSize: 100,
+    cacheSize: 1000,
     cacheTTL: 60000
-  }) as unknown as MetricsManager;
-
-  const alertSystem = new AlertSystem();
+  });
+  
+  const alertSystem = new AlertSystemImpl();
+  
+  const analytics = new RealTimeAnalytics({
+    metricsManager,
+    alertSystem,
+    updateInterval: 1000,
+    maxRetries: 3,
+    batchSize: 100
+  });
 
   useEffect(() => {
-    // Start tracking event metrics
-    analyticsService.trackEventMetrics(eventId);
+    analytics.trackEventMetrics(eventId);
 
-    // Subscribe to real-time metrics
-    const unsubscribeMetrics = metricsManager.subscribe((newMetrics: MetricsData) => {
+    const unsubscribeMetrics = metricsManager.onMetricsUpdate((newMetrics: MetricsData) => {
       setMetrics(newMetrics);
       analyticsService.trackEvent('metrics_updated', {
         eventId,
@@ -105,17 +55,23 @@ export const AdvancedDashboard: React.FC<AdvancedDashboardProps> = ({ eventId })
       });
     });
 
-    // Subscribe to alerts
-    const unsubscribeAlerts = alertSystem.subscribe((newAlerts: Alert[]) => {
-      setAlerts(newAlerts);
+    const unsubscribeAlerts = alertSystem.subscribe((systemAlerts: Alert[]) => {
+      const filteredAlerts = systemAlerts
+        .filter((alert): alert is Alert => 
+          alert.severity === "info" || 
+          alert.severity === "warning" || 
+          alert.severity === "critical"
+        );
+      
+      setAlerts(filteredAlerts);
       analyticsService.trackEvent('alerts_updated', {
         eventId,
-        alertCount: newAlerts.length
+        alertCount: filteredAlerts.length
       });
     });
 
     return () => {
-      analyticsService.stopTracking(eventId);
+      analytics.stopTracking(eventId);
       unsubscribeMetrics();
       unsubscribeAlerts();
     };
@@ -128,7 +84,7 @@ export const AdvancedDashboard: React.FC<AdvancedDashboardProps> = ({ eventId })
         <Card gradient>
           <h3 className="text-lg font-semibold mb-2 text-white">Request Rate</h3>
           <LineChart
-            data={transformToChartData(metrics?.requestRate || [], 'time', 'requests')}
+            data={transformChartData(metrics?.requestRate || [], 'time', 'requests')}
             height={200}
             xAxis="time"
             yAxis="requests"
@@ -139,7 +95,7 @@ export const AdvancedDashboard: React.FC<AdvancedDashboardProps> = ({ eventId })
         <Card gradient>
           <h3 className="text-lg font-semibold mb-2 text-white">Queue Length</h3>
           <LineChart
-            data={transformToChartData(metrics?.queueLength || [], 'time', 'length')}
+            data={transformChartData(metrics?.queueLength || [], 'time', 'length')}
             height={200}
             xAxis="time"
             yAxis="length"
@@ -150,7 +106,7 @@ export const AdvancedDashboard: React.FC<AdvancedDashboardProps> = ({ eventId })
         <Card gradient>
           <h3 className="text-lg font-semibold mb-2 text-white">Active Users</h3>
           <LineChart
-            data={transformToChartData(metrics?.activeUsers || [], 'time', 'users')}
+            data={transformChartData(metrics?.activeUsers || [], 'time', 'users')}
             height={200}
             xAxis="time"
             yAxis="users"
@@ -164,7 +120,7 @@ export const AdvancedDashboard: React.FC<AdvancedDashboardProps> = ({ eventId })
         <Card gradient>
           <h3 className="text-lg font-semibold mb-2 text-white">Response Times</h3>
           <BarChart
-            data={transformToChartData(metrics?.responseTimes || [], 'endpoint', 'ms')}
+            data={transformChartData(metrics?.responseTimes || [], 'endpoint', 'ms')}
             height={250}
             xAxis="endpoint"
             yAxis="ms"
@@ -175,7 +131,7 @@ export const AdvancedDashboard: React.FC<AdvancedDashboardProps> = ({ eventId })
         <Card gradient>
           <h3 className="text-lg font-semibold mb-2 text-white">Error Rates</h3>
           <PieChart
-            data={transformToChartData(metrics?.errorRates || [], 'type', 'count')}
+            data={transformChartData(metrics?.errorRates || [], 'type', 'count')}
             height={250}
             labelKey="type"
             valueKey="count"

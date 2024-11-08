@@ -10,12 +10,12 @@ interface AlertRule {
   throttleMs?: number;
 }
 
-interface Alert {
+export interface Alert {
   id: string;
   ruleId: string;
   name: string;
   description: string;
-  severity: AlertRule['severity'];
+  severity: 'info' | 'warning' | 'error' | 'critical';
   timestamp: number;
   context?: Record<string, any>;
 }
