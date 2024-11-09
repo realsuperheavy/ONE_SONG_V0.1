@@ -1,12 +1,17 @@
 import { BaseChart } from './BaseChart';
 import { ChartData } from '@/types/charts';
 import { getChartColors } from '@/utils/charts';
+import { ChartConfiguration } from 'chart.js';
+
+interface ChartDataWithKeys extends ChartData {
+  [key: string]: string | number;
+}
 
 interface PieChartProps {
-  data: ChartData[];
+  data: ChartDataWithKeys[];
   labelKey: string;
   valueKey: string;
-  colors: string[];
+  colors: Array<{background: string; border: string}>;
   height?: number;
   className?: string;
 }
@@ -19,12 +24,12 @@ export const PieChart: React.FC<PieChartProps> = ({
   height = 250,
   className
 }) => {
-  const config = {
+  const config: ChartConfiguration<'pie'> = {
     type: 'pie',
     data: {
       labels: data.map(item => item[labelKey]),
       datasets: [{
-        data: data.map(item => item[valueKey]),
+        data: data.map(item => Number(item[valueKey])), // Convert to number
         backgroundColor: colors.map(c => c.background),
         borderColor: colors.map(c => c.border),
         borderWidth: 1
@@ -51,8 +56,8 @@ export const PieChart: React.FC<PieChartProps> = ({
 
   return (
     <BaseChart 
-      config={config} 
-      className={`h-${height} ${className}`}
+      config={config as ChartConfiguration} 
+      className={`h-${height} ${className ?? ''}`}
     />
   );
-}; 
+};

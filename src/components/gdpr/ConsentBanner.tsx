@@ -4,6 +4,13 @@ import { Card } from '../ui/card';
 import { GDPRDataManager } from '@/lib/gdpr/DataManager';
 import { analyticsService } from '@/lib/firebase/services/analytics';
 
+interface UserConsent {
+  necessary: boolean;
+  analytics: boolean;
+  marketing: boolean;
+  updatedAt: string;
+}
+
 interface ConsentBannerProps {
   userId: string;
   onConsent: (consent: UserConsent) => void;
@@ -53,7 +60,7 @@ export const ConsentBanner: React.FC<ConsentBannerProps> = ({ userId, onConsent 
 
   const updateConsent = async (newConsent: UserConsent) => {
     const gdpr = new GDPRDataManager();
-    await gdpr.updateConsent(userId, newConsent);
+    await gdpr.updateUserConsent(userId, newConsent);
     onConsent(newConsent);
   };
 
@@ -79,7 +86,7 @@ export const ConsentBanner: React.FC<ConsentBannerProps> = ({ userId, onConsent 
                   Customize
                 </Button>
                 <Button 
-                  variant="primary" 
+                  variant="default" 
                   onClick={handleAcceptAll}
                   aria-label="Accept all cookies"
                 >
@@ -113,7 +120,7 @@ export const ConsentBanner: React.FC<ConsentBannerProps> = ({ userId, onConsent 
                     <input
                       type="checkbox"
                       checked={consent.analytics}
-                      onChange={(e) => setConsent(prev => ({
+                      onChange={(e) => setConsent((prev: UserConsent) => ({
                         ...prev,
                         analytics: e.target.checked
                       }))}
@@ -132,7 +139,7 @@ export const ConsentBanner: React.FC<ConsentBannerProps> = ({ userId, onConsent 
                     <input
                       type="checkbox"
                       checked={consent.marketing}
-                      onChange={(e) => setConsent(prev => ({
+                      onChange={(e) => setConsent((prev: UserConsent) => ({
                         ...prev,
                         marketing: e.target.checked
                       }))}
@@ -156,7 +163,7 @@ export const ConsentBanner: React.FC<ConsentBannerProps> = ({ userId, onConsent 
                   Cancel
                 </Button>
                 <Button 
-                  variant="primary" 
+                  variant="default" 
                   onClick={handleSavePreferences}
                   aria-label="Save cookie preferences"
                 >
@@ -169,4 +176,4 @@ export const ConsentBanner: React.FC<ConsentBannerProps> = ({ userId, onConsent 
       </div>
     </Card>
   );
-}; 
+};

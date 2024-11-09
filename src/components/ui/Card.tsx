@@ -3,7 +3,7 @@ import { COMPONENTS, EFFECTS, ANIMATIONS, TYPOGRAPHY } from '@/design/tokens';
 import { useTouchInteraction } from '@/hooks/useTouchInteraction';
 import type { TouchEventHandler } from 'react';
 
-interface CardProps {
+export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   interactive?: boolean;
   elevated?: boolean;

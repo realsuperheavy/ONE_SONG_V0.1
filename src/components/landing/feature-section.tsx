@@ -1,10 +1,6 @@
 import { Music, Users, Radio, Sparkles, ThumbsUp, Clock } from "lucide-react";
-import { Card, CardProps } from "../ui/card";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { HTMLAttributes } from "react";
-
-// Remove the conflicting Card redefinition and just extend the type
-type ExtendedCardProps = CardProps & HTMLAttributes<HTMLDivElement>;
 
 const features = [
   {
@@ -82,8 +78,8 @@ export function FeatureSection() {
                 style={{
                   animationDelay: `${feature.delay}ms`,
                   boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.1)",
-                } as React.CSSProperties}
-                >
+                }}
+              >
                 <div className="space-y-4">
                   <div className="flex items-center gap-4">
                     <div className={cn(

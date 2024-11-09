@@ -1,6 +1,7 @@
 import { BaseChart } from './BaseChart';
 import { ChartData } from '@/types/charts';
 import { getChartColors } from '@/utils/charts';
+import { ChartConfiguration } from 'chart.js';
 
 interface LineChartProps {
   data: ChartData[];
@@ -21,7 +22,7 @@ export const LineChart: React.FC<LineChartProps> = ({
 }) => {
   const colors = getChartColors(1)[0];
 
-  const config = {
+  const config: ChartConfiguration<'line'> = {
     type: 'line',
     data: {
       labels: data.map(item => item.label),
@@ -63,7 +64,7 @@ export const LineChart: React.FC<LineChartProps> = ({
 
   return (
     <BaseChart 
-      config={config} 
+      config={config}
       className={`h-${height} ${className}`}
     />
   );

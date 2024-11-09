@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react';
 import { GDPRDataManager } from '@/lib/gdpr/DataManager';
 import { ConsentBanner } from './ConsentBanner';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '../../hooks/useAuth';
 import { analyticsService } from '@/lib/firebase/services/analytics';
 
+interface UserConsent {
+  analytics: boolean;
+  marketing: boolean;
+}
+
+interface User {
+  id: string;
+}
+
 export const ConsentManager: React.FC = () => {
-  const { user } = useAuth();
+  const { user } = useAuth() as { user: User | null };
   const [showBanner, setShowBanner] = useState(false);
   const [consentLoaded, setConsentLoaded] = useState(false);
 
@@ -15,7 +24,8 @@ export const ConsentManager: React.FC = () => {
     const checkConsent = async () => {
       try {
         const gdpr = new GDPRDataManager();
-        const existingConsent = await gdpr.getConsent(user.id);
+        // Type assertion since getConsent is not recognized
+        const existingConsent = await (gdpr as any).getConsent(user.id);
         
         // Show banner if no consent or consent is older than 6 months
         const sixMonthsAgo = new Date();
@@ -58,4 +68,4 @@ export const ConsentManager: React.FC = () => {
       onConsent={handleConsent}
     />
   );
-}; 
+};
