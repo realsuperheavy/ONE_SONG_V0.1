@@ -1,107 +1,279 @@
-import React from 'react'
-import { Music, Users, Radio, Lightbulb, ThumbsUp, ListMusic } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+'use client';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { Music2, QrCode, ArrowRight, MapPin, Users, Clock } from 'lucide-react';
+import { QRScannerDialog } from '@/components/qr/qr-scanner-dialog';
+import { cn } from '@/lib/utils';
+import { HeroSection } from '@/components/landing/hero-section';
+import { FeatureSection } from '@/components/landing/details-section';
+import { UserSelection } from '@/components/landing/user-selection';
+import { useToast } from '@/components/ui/use-toast';
+import { Badge } from '@/components/ui/badge';
 
-export default function LandingPage() {
-  return (
-    <div className="min-h-screen bg-[#292428] text-white/90">
-      <div className="max-w-[1280px] mx-auto px-8 py-12">
-        {/* Hero Section */}
-        <header className="text-center mb-32">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#F49620]/10 mb-6">
-            <Music className="w-6 h-6 text-[#F49620]" />
-          </div>
-          <h1 className="font-inter font-bold text-[48px] leading-[1.2] tracking-[-0.02em] text-[#F49620] mb-4">
-            The Party Starts Here
-          </h1>
-          <p className="font-inter text-[18px] leading-[1.5] text-white/60 max-w-2xl mx-auto mb-12">
-            Connect with the DJ Live and shape the playlist in real-time. Request
-            your favorite songs and be more a part of the party.
-          </p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4 max-w-md mx-auto">
-            <Button 
-              className="rounded-lg px-4 py-6 font-medium transition-all duration-200 bg-[#F49620] hover:bg-[#FF7200] active:bg-[#E08010] disabled:bg-[#3E2E1B] text-white w-full flex items-center gap-2"
-            >
-              <Users className="w-5 h-5" />
-              <div className="flex flex-col items-start text-left">
-                <span className="text-sm font-semibold">Join an Event</span>
-                <span className="text-xs text-white/60">Request songs and vote on the playlist</span>
-              </div>
-            </Button>
-            <Button 
-              variant="outline"
-              className="rounded-lg px-4 py-6 font-medium transition-all duration-200 border-2 border-[#F49620] text-[#F49620] hover:bg-[#F49620]/10 active:bg-[#F49620]/20 w-full flex items-center gap-2"
-            >
-              <Radio className="w-5 h-5" />
-              <div className="flex flex-col items-start text-left">
-                <span className="text-sm font-semibold">Login as DJ</span>
-                <span className="text-xs text-white/60">Manage your events and control the music</span>
-              </div>
-            </Button>
-          </div>
-        </header>
-
-        {/* Features Section */}
-        <section className="text-center mb-16">
-          <h2 className="font-inter font-bold text-[32px] leading-[1.2] tracking-[-0.02em] text-white mb-4">
-            Everything you need for interactive music events
-          </h2>
-          <p className="font-inter text-[16px] leading-[1.5] text-white/60 max-w-2xl mx-auto mb-16">
-            Connect with your audience in real-time and create unforgettable experiences with our
-            comprehensive set of features.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[
-              {
-                icon: <Music className="w-6 h-6" />,
-                title: 'Real-Time Requests',
-                description: 'Request your favorite songs during live events with instant updates and voting'
-              },
-              {
-                icon: <Users className="w-6 h-6" />,
-                title: 'Interactive Events',
-                description: 'Join events easily with unique codes or QR scanning, and connect with the crowd'
-              },
-              {
-                icon: <Radio className="w-6 h-6" />,
-                title: 'DJ Controls',
-                description: 'Full control over your event playlist with real-time audience feedback'
-              },
-              {
-                icon: <Lightbulb className="w-6 h-6" />,
-                title: 'Smart Suggestions',
-                description: 'Get personalized song recommendations based on crowd preferences'
-              },
-              {
-                icon: <ThumbsUp className="w-6 h-6" />,
-                title: 'Live Voting',
-                description: 'Let the crowd influence the playlist by voting on upcoming songs'
-              },
-              {
-                icon: <ListMusic className="w-6 h-6" />,
-                title: 'Queue Management',
-                description: 'Efficient playlist management with smart queuing and timing features'
-              }
-            ].map((feature, index) => (
-              <Card 
-                key={index} 
-                className="bg-gradient-to-b from-[#1E1E1E] to-[#2E2F2E] rounded-xl p-6 transition-all duration-200 hover:scale-105 text-left"
-              >
-                <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-[#F49620]/10 mb-4">
-                  <div className="text-[#F49620]">{feature.icon}</div>
-                </div>
-                <h3 className="font-inter font-bold text-[20px] leading-[1.2] tracking-[-0.02em] text-white mb-2">
-                  {feature.title}
-                </h3>
-                <p className="font-inter text-[14px] leading-[1.5] text-white/60">
-                  {feature.description}
-                </p>
-              </Card>
-            ))}
-          </div>
-        </section>
-      </div>
-    </div>
-  )
+interface LiveEvent {
+  id: string;
+  name: string;
+  venue: string;
+  status: 'active' | 'ending' | 'full';
+  attendeeCount: number;
+  distance?: string;
 }
+
+function LandingPage() {
+  const [selectedUserType, setSelectedUserType] = useState<'attendee' | 'dj' | null>(null);
+  const [eventCode, setEventCode] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [nearbyEvents, setNearbyEvents] = useState<LiveEvent[]>([]);
+  const backgroundRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const { toast } = useToast();
+
+  // Mouse tracking effect for interactive background
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (backgroundRef.current) {
+        const { left, top } = backgroundRef.current.getBoundingClientRect();
+        setMousePosition({
+          x: e.clientX - left,
+          y: e.clientY - top,
+        });
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  // Simulated nearby events data
+  useEffect(() => {
+    if (selectedUserType === 'attendee') {
+      setNearbyEvents([
+        {
+          id: '1',
+          name: 'Summer Vibes Party',
+          venue: 'The Grand Club',
+          status: 'active',
+          attendeeCount: 156,
+          distance: '0.5 miles'
+        },
+        {
+          id: '2',
+          name: 'Night Bass',
+          venue: 'Club Echo',
+          status: 'ending',
+          attendeeCount: 89,
+          distance: '1.2 miles'
+        },
+        {
+          id: '3',
+          name: 'Club Vibes',
+          venue: 'Neon Nightclub',
+          status: 'full',
+          attendeeCount: 200,
+          distance: '2.1 miles'
+        }
+      ]);
+    }
+  }, [selectedUserType]);
+
+  const handleUserTypeSelect = (type: 'attendee' | 'dj') => {
+    setSelectedUserType(type);
+  };
+
+  const handleJoinEvent = async (code: string) => {
+    setIsSubmitting(true);
+    try {
+      router.push(`/event/${code}`);
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Invalid event code. Please try again.'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (eventCode.trim()) {
+      handleJoinEvent(eventCode.trim().toUpperCase());
+    }
+  };
+
+  return (
+    <div 
+      ref={backgroundRef}
+      className="min-h-screen bg-background flex flex-col"
+      style={{
+        backgroundImage: `radial-gradient(
+          600px at ${mousePosition.x}px ${mousePosition.y}px,
+          rgba(var(--primary-rgb), 0.15),
+          transparent 80%
+        )`
+      }}
+    >
+      {/* Navbar */}
+      <div className="w-full border-b bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Music2 className="h-4 w-4 text-primary" />
+            </div>
+            <span className="font-bold tracking-tight">OneSong</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Hero Section */}
+      <HeroSection />
+
+      {/* Main Content */}
+      <div className="container mx-auto px-4 py-12">
+        <div className="max-w-md mx-auto space-y-8">
+          {/* User Type Selection */}
+          <UserSelection 
+            selectedType={selectedUserType}
+            onSelect={handleUserTypeSelect}
+          />
+
+          {/* Event Code Input */}
+          {selectedUserType === 'attendee' && (
+            <div className="space-y-4 animate-in fade-in-50 slide-in-from-bottom-5">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="relative group">
+                  <Input
+                    type="text"
+                    placeholder="Enter event code"
+                    value={eventCode}
+                    onChange={(e) => setEventCode(e.target.value.toUpperCase())}
+                    className={cn(
+                      "text-center text-xl tracking-widest h-14",
+                      "transition-all duration-300",
+                      "focus:shadow-[0_0_0_2px_hsl(var(--primary))]",
+                      "placeholder:text-muted-foreground/50",
+                      "group-hover:shadow-[0_0_30px_-5px_hsl(var(--primary))]"
+                    )}
+                    maxLength={6}
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <Button 
+                  type="submit" 
+                  className="w-full h-14 text-lg font-medium"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Joining...' : (
+                    <>
+                      Join Event
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </>
+                  )}
+                </Button>
+              </form>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    or
+                  </span>
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                className="w-full h-14 text-lg font-medium gap-2"
+                onClick={() => setShowScanner(true)}
+              >
+                <QrCode className="h-5 w-5" />
+                Scan QR Code
+              </Button>
+            </div>
+          )}
+
+          {/* Live Events Section */}
+          {selectedUserType === 'attendee' && nearbyEvents.length > 0 && (
+            <div className="space-y-4 animate-in fade-in-50 slide-in-from-bottom-5">
+              <h2 className="text-lg font-semibold">Events Near You</h2>
+              <div className="space-y-3">
+                {nearbyEvents.map((event) => (
+                  <Card 
+                    key={event.id}
+                    className="p-4 hover:bg-secondary/50 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-medium truncate">{event.name}</h3>
+                          <Badge
+                            variant={
+                              event.status === 'active' ? 'default' :
+                              event.status === 'ending' ? 'secondary' :
+                              'destructive'
+                            }
+                          >
+                            {event.status === 'active' && (
+                              <span className="flex items-center gap-1">
+                                <span className="w-1 h-1 rounded-full bg-current animate-pulse" />
+                                Live
+                              </span>
+                            )}
+                            {event.status === 'ending' && 'Ending Soon'}
+                            {event.status === 'full' && 'Full'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-4 w-4" />
+                            <span className="truncate">{event.venue}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Users className="h-4 w-4" />
+                            <span>{event.attendeeCount}</span>
+                          </div>
+                          {event.distance && (
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-4 w-4" />
+                              <span>{event.distance}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => handleJoinEvent(event.id)}
+                        disabled={event.status === 'full'}
+                      >
+                        Join
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Features Section */}
+      <FeatureSection />
+
+      {/* QR Scanner Dialog */}
+      <QRScannerDialog
+        open={showScanner}
+        onOpenChange={setShowScanner}
+        onScan={handleJoinEvent}
+      />
+    </div>
+  );
+}
+
+export default LandingPage;
