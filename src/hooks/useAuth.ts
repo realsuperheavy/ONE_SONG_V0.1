@@ -8,15 +8,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
       if (firebaseUser) {
-        // Convert Firebase user to our User type
         setUser({
           id: firebaseUser.uid,
           email: firebaseUser.email!,
+          type: 'attendee',
           profile: {
             displayName: firebaseUser.displayName || firebaseUser.email!.split('@')[0],
             email: firebaseUser.email!,
             photoURL: firebaseUser.photoURL
-          }
+          },
+          settings: {
+            theme: 'dark',
+            notifications: true,
+            language: 'en'
+          },
+          stats: {
+            eventsCreated: 0,
+            requestsMade: 0,
+            tipsGiven: 0
+          },
+          createdAt: new Date().toISOString()
         });
       } else {
         setUser(null);

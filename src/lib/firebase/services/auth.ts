@@ -12,21 +12,31 @@ import { User } from '@/types/models';
 export interface AuthError {
   code: string;
   message: string;
+  details?: Record<string, unknown>;
+}
+
+export interface SignUpResult {
+  user: FirebaseUser;
+  profile: User;
+  error?: AuthError;
 }
 
 export const authService = {
-  signUp: async (email: string, password: string, userData: Partial<User>) => {
+  signUp: async (
+    email: string, 
+    password: string, 
+    userData: Partial<User>
+  ): Promise<SignUpResult> => {
     try {
       const { user } = await createUserWithEmailAndPassword(auth, email, password);
       
-      // Create user profile in Firestore
-      await setDoc(doc(db, 'users', user.uid), {
+      const profile: User = {
         id: user.uid,
-        email: user.email,
+        email: user.email!,
         type: userData.type || 'attendee',
         profile: {
           displayName: userData.profile?.displayName || email.split('@')[0],
-          email: user.email,
+          email: user.email!,
           photoURL: user.photoURL || null,
         },
         settings: {
@@ -40,9 +50,11 @@ export const authService = {
           tipsGiven: 0
         },
         createdAt: new Date().toISOString()
-      });
+      };
 
-      return user;
+      await setDoc(doc(db, 'users', user.uid), profile);
+
+      return { user, profile };
     } catch (error) {
       throw error as AuthError;
     }

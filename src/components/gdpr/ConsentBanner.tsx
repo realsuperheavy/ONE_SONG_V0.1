@@ -86,7 +86,7 @@ export const ConsentBanner: React.FC<ConsentBannerProps> = ({ userId, onConsent 
                   Customize
                 </Button>
                 <Button 
-                  variant="default" 
+                  variant="primary" 
                   onClick={handleAcceptAll}
                   aria-label="Accept all cookies"
                 >
@@ -163,7 +163,7 @@ export const ConsentBanner: React.FC<ConsentBannerProps> = ({ userId, onConsent 
                   Cancel
                 </Button>
                 <Button 
-                  variant="default" 
+                  variant="primary" 
                   onClick={handleSavePreferences}
                   aria-label="Save cookie preferences"
                 >

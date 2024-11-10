@@ -1,46 +1,51 @@
-interface CacheConfig {
-  maxSize: number;
-  ttl: number;
+export interface Cache<T> {
+  get: (key: string) => Promise<T | null>;
+  set: (key: string, value: T, ttl?: number) => Promise<void>;
+  delete: (key: string) => Promise<void>;
+  getAll: () => Promise<Map<string, T>>;
+  clear: () => Promise<void>;
 }
 
-class Cache<T> {
-  private cache: Map<string, { value: T; timestamp: number }>;
-  private config: CacheConfig;
+export class CacheImplementation<T> implements Cache<T> {
+  private store = new Map<string, { value: T; expiry: number }>();
 
-  constructor(config: CacheConfig) {
-    this.cache = new Map();
-    this.config = config;
-  }
-
-  set(key: string, value: T): void {
-    if (this.cache.size >= this.config.maxSize) {
-      this.evictOldest();
-    }
-    this.cache.set(key, {
-      value,
-      timestamp: Date.now()
-    });
-  }
-
-  get(key: string): T | null {
-    const item = this.cache.get(key);
+  async get(key: string): Promise<T | null> {
+    const item = this.store.get(key);
     if (!item) return null;
-
-    if (Date.now() - item.timestamp > this.config.ttl) {
-      this.cache.delete(key);
+    if (item.expiry < Date.now()) {
+      this.store.delete(key);
       return null;
     }
-
     return item.value;
   }
 
-  private evictOldest(): void {
-    const oldest = [...this.cache.entries()]
-      .sort(([, a], [, b]) => a.timestamp - b.timestamp)[0];
-    if (oldest) {
-      this.cache.delete(oldest[0]);
-    }
+  async set(key: string, value: T, ttl = 3600000): Promise<void> {
+    this.store.set(key, {
+      value,
+      expiry: Date.now() + ttl
+    });
   }
-}
 
-export const createCache = <T>(config: CacheConfig) => new Cache<T>(config); 
+  async delete(key: string): Promise<void> {
+    this.store.delete(key);
+  }
+
+  async getAll(): Promise<Map<string, T>> {
+    const now = Date.now();
+    const result = new Map<string, T>();
+    
+    for (const [key, item] of this.store.entries()) {
+      if (item.expiry >= now) {
+        result.set(key, item.value);
+      } else {
+        this.store.delete(key);
+      }
+    }
+    
+    return result;
+  }
+
+  async clear(): Promise<void> {
+    this.store.clear();
+  }
+} 

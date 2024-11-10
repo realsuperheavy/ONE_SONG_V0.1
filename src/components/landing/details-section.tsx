@@ -1,10 +1,13 @@
 import { Music, Users, Radio, Sparkles, ThumbsUp, Clock } from "lucide-react";
-import { Card, CardProps } from "../ui/card";
+import { Card } from "../ui/card";
 import { cn } from "@/lib/utils";
-import { HTMLAttributes } from "react";
+import type { HTMLAttributes } from "react";
 
-// Remove the conflicting Card redefinition and just extend the type
-type ExtendedCardProps = CardProps & HTMLAttributes<HTMLDivElement>;
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+}
 
 const features = [
   {

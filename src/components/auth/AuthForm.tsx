@@ -1,14 +1,15 @@
 import { useState, FC } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { authService } from '@/lib/firebase/services/auth';
-import { ComponentProps } from 'react';
+import { FirebaseError } from 'firebase/app';
+import { User } from '@/types/models';
 
 interface AuthFormProps {
   mode: 'login' | 'register';
-  onSuccess: () => void;
+  onSuccess?: () => void;
 }
 
-export const AuthForm: FC<AuthFormProps> = ({ mode, onSuccess }: AuthFormProps) => {
+export const AuthForm: FC<AuthFormProps> = ({ mode, onSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -24,13 +25,20 @@ export const AuthForm: FC<AuthFormProps> = ({ mode, onSuccess }: AuthFormProps) 
 
     try {
       if (mode === 'register') {
-        await authService.signUp(email, password);
+        await authService.signUp(email, password, {
+          profile: {
+            displayName: name,
+            email: email,
+            photoURL: null
+          }
+        });
       } else {
         await authService.signIn(email, password);
       }
       onSuccess?.();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      const firebaseError = err as FirebaseError;
+      setError(firebaseError.message);
     } finally {
       setLoading(false);
     }

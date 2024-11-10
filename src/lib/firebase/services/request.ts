@@ -1,26 +1,40 @@
 import { ref, push, update, remove, onValue, get, query, orderByChild, increment } from '@firebase/database';
 import { rtdb } from '../config';
 import { SongRequest } from '@/types/models';
+import { DatabaseReference, DataSnapshot } from '@firebase/database';
+
+interface RequestServiceConfig {
+  maxVotesPerUser: number;
+  voteCooldown: number; // in milliseconds
+}
+
+interface RequestUpdate {
+  status?: SongRequest['status'];
+  metadata?: Partial<SongRequest['metadata']>;
+}
 
 export const requestService = {
-  createRequest: async (request: Partial<SongRequest>) => {
+  createRequest: async (request: Omit<SongRequest, 'id' | 'status'>): Promise<string> => {
     const requestRef = ref(rtdb, `requests/${request.eventId}`);
-    const newRequest = {
+    const newRequest: Omit<SongRequest, 'id'> = {
       ...request,
       status: 'pending',
       metadata: {
-        ...request.metadata,
         requestTime: new Date().toISOString(),
         votes: 0
       }
     };
     
     const newRequestRef = await push(requestRef, newRequest);
-    return newRequestRef.key;
+    return newRequestRef.key!;
   },
 
-  updateRequest: async (requestId: string, updates: Partial<SongRequest>) => {
-    const requestRef = ref(rtdb, `requests/${updates.eventId}/${requestId}`);
+  updateRequest: async (
+    requestId: string, 
+    eventId: string, 
+    updates: RequestUpdate
+  ): Promise<void> => {
+    const requestRef = ref(rtdb, `requests/${eventId}/${requestId}`);
     await update(requestRef, updates);
   },
 

@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'export', // Required for static exports
+  output: 'export',
   images: {
-    unoptimized: true // Required for static exports
+    unoptimized: true
   },
   env: {
     NEXT_PUBLIC_FIREBASE_CONFIG_DEV: process.env.NEXT_PUBLIC_FIREBASE_CONFIG_DEV,

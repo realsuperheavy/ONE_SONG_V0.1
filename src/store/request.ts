@@ -9,10 +9,10 @@ interface RequestState {
   setRequests: (requests: SongRequest[]) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  createRequest: (request: Partial<SongRequest>) => Promise<void>;
-  updateRequest: (requestId: string, updates: Partial<SongRequest>) => Promise<void>;
-  deleteRequest: (requestId: string) => Promise<void>;
-  voteRequest: (requestId: string, userId: string) => Promise<void>;
+  createRequest: (request: Omit<SongRequest, 'id' | 'status'>) => Promise<void>;
+  updateRequest: (requestId: string, eventId: string, updates: Partial<SongRequest>) => Promise<void>;
+  deleteRequest: (requestId: string, eventId: string) => Promise<void>;
+  voteRequest: (requestId: string, eventId: string, userId: string) => Promise<void>;
 }
 
 export const useRequestStore = create<RequestState>((set, get) => ({
@@ -36,10 +36,10 @@ export const useRequestStore = create<RequestState>((set, get) => ({
     }
   },
 
-  updateRequest: async (requestId, updates) => {
+  updateRequest: async (requestId, eventId, updates) => {
     set({ loading: true, error: null });
     try {
-      await requestService.updateRequest(requestId, updates);
+      await requestService.updateRequest(requestId, eventId, updates);
     } catch (error: any) {
       set({ error: error.message });
       throw error;
@@ -48,10 +48,10 @@ export const useRequestStore = create<RequestState>((set, get) => ({
     }
   },
 
-  deleteRequest: async (requestId) => {
+  deleteRequest: async (requestId, eventId) => {
     set({ loading: true, error: null });
     try {
-      await requestService.deleteRequest(requestId);
+      await requestService.deleteRequest(requestId, eventId);
     } catch (error: any) {
       set({ error: error.message });
       throw error;
@@ -60,10 +60,10 @@ export const useRequestStore = create<RequestState>((set, get) => ({
     }
   },
 
-  voteRequest: async (requestId, userId) => {
+  voteRequest: async (requestId, eventId, userId) => {
     set({ loading: true, error: null });
     try {
-      await requestService.voteRequest(requestId, userId);
+      await requestService.voteRequest(requestId, eventId, userId);
     } catch (error: any) {
       set({ error: error.message });
       throw error;

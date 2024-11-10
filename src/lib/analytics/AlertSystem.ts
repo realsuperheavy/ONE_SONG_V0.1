@@ -1,177 +1,114 @@
 import { analyticsService } from '@/lib/firebase/services/analytics';
 import { Cache } from '@/lib/cache';
 
-interface AlertRule {
+export interface AlertRule {
   id: string;
   name: string;
   description: string;
-  condition: () => boolean;
+  condition: () => Promise<boolean>;
   severity: 'info' | 'warning' | 'error' | 'critical';
-  throttleMs?: number;
+  throttleMs?: number;  // Minimum time between alerts
 }
 
-export interface Alert {
+interface Alert {
   id: string;
   ruleId: string;
-  name: string;
-  description: string;
-  severity: 'info' | 'warning' | 'error' | 'critical';
+  message: string;
+  severity: AlertRule['severity'];
   timestamp: number;
-  context?: Record<string, any>;
+  metadata?: Record<string, any>;
 }
 
-export interface AlertSystem {
-  subscribe: (callback: (alerts: Alert[]) => void) => () => void;
-  unsubscribe: () => void;
-}
-
-export class AlertSystemImpl implements AlertSystem {
-  private rules: Map<string, AlertRule>;
-  private alerts: Alert[];
-  private subscribers: Set<(alerts: Alert[]) => void>;
-  private cache: Cache<boolean>;
-  private readonly MAX_ALERTS = 100;
-  private readonly DEFAULT_THROTTLE = 5 * 60 * 1000; // 5 minutes
+export class AlertSystem {
+  private rules: Map<string, AlertRule> = new Map();
+  private alertCache: Cache<Alert>;
+  private lastAlertTime: Map<string, number> = new Map();
 
   constructor() {
-    this.rules = new Map();
-    this.alerts = [];
-    this.subscribers = new Set();
-    this.cache = new Cache({ maxSize: 1000, ttl: 60 * 60 * 1000 }); // 1 hour
-    this.initializeDefaultRules();
+    this.alertCache = new Cache<Alert>({ maxSize: 100, ttl: 24 * 60 * 60 * 1000 }); // 24 hours
   }
 
+  /**
+   * Add a new alert rule
+   */
   addRule(rule: AlertRule): void {
-    if (this.rules.has(rule.id)) {
-      throw new Error(`Rule with ID ${rule.id} already exists`);
-    }
-
-    this.rules.set(rule.id, {
-      ...rule,
-      throttleMs: rule.throttleMs || this.DEFAULT_THROTTLE
-    });
-
-    analyticsService.trackEvent('alert_rule_added', {
-      ruleId: rule.id,
-      name: rule.name,
-      severity: rule.severity
-    });
+    this.rules.set(rule.id, rule);
   }
 
-  subscribe(callback: (alerts: Alert[]) => void): () => void {
-    this.subscribers.add(callback);
-    return () => this.subscribers.delete(callback);
+  /**
+   * Remove an alert rule
+   */
+  removeRule(ruleId: string): void {
+    this.rules.delete(ruleId);
   }
 
-  async checkRules(): Promise<void> {
+  /**
+   * Check all rules and generate alerts if conditions are met
+   */
+  async checkRules(): Promise<Alert[]> {
+    const alerts: Alert[] = [];
+    const now = Date.now();
+
     for (const rule of this.rules.values()) {
       try {
-        const cacheKey = `rule_${rule.id}`;
-        if (this.cache.get(cacheKey)) continue;
+        // Check throttling
+        const lastAlertTime = this.lastAlertTime.get(rule.id) || 0;
+        if (rule.throttleMs && now - lastAlertTime < rule.throttleMs) {
+          continue;
+        }
 
-        if (rule.condition()) {
-          await this.triggerAlert(rule);
-          this.cache.set(cacheKey, true, rule.throttleMs);
+        // Check condition
+        const isTriggered = await rule.condition();
+        if (isTriggered) {
+          const alert = {
+            id: `${rule.id}_${now}`,
+            ruleId: rule.id,
+            message: rule.description,
+            severity: rule.severity,
+            timestamp: now
+          };
+
+          alerts.push(alert);
+          await this.alertCache.set(alert.id, alert);
+          this.lastAlertTime.set(rule.id, now);
+
+          // Track alert in analytics
+          analyticsService.trackEvent('alert_triggered', {
+            ruleId: rule.id,
+            severity: rule.severity,
+            timestamp: now
+          });
         }
       } catch (error) {
         analyticsService.trackError(error as Error, {
-          context: 'alert_rule_check',
+          context: 'alert_system',
           ruleId: rule.id
         });
       }
     }
+
+    return alerts;
   }
 
-  private async triggerAlert(rule: AlertRule): Promise<void> {
-    const alert: Alert = {
-      id: `${rule.id}_${Date.now()}`,
-      ruleId: rule.id,
-      name: rule.name,
-      description: rule.description,
-      severity: rule.severity,
-      timestamp: Date.now()
-    };
+  /**
+   * Get recent alerts
+   */
+  async getRecentAlerts(limit: number = 50): Promise<Alert[]> {
+    const alerts = await this.alertCache.getAll();
+    return [...alerts.values()]
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, limit);
+  }
 
-    // Add alert to list
-    this.alerts.unshift(alert);
-    
-    // Maintain max alerts
-    if (this.alerts.length > this.MAX_ALERTS) {
-      this.alerts.pop();
+  /**
+   * Clear alerts for a specific rule
+   */
+  async clearAlerts(ruleId: string): Promise<void> {
+    const alerts = await this.alertCache.getAll();
+    for (const [key, alert] of alerts.entries()) {
+      if (alert.ruleId === ruleId) {
+        await this.alertCache.delete(key);
+      }
     }
-
-    // Notify subscribers
-    this.subscribers.forEach(callback => callback([...this.alerts]));
-
-    // Track alert
-    await analyticsService.trackEvent('alert_triggered', {
-      alertId: alert.id,
-      ruleId: rule.id,
-      severity: rule.severity
-    });
-  }
-
-  private initializeDefaultRules(): void {
-    // High error rate rule
-    this.addRule({
-      id: 'high_error_rate',
-      name: 'High Error Rate',
-      description: 'Error rate exceeds 10%',
-      severity: 'critical',
-      condition: () => this.getErrorRate() > 0.1
-    });
-
-    // Response time rule
-    this.addRule({
-      id: 'slow_response_time',
-      name: 'Slow Response Time',
-      description: 'Average response time exceeds 1000ms',
-      severity: 'warning',
-      condition: () => this.getAverageResponseTime() > 1000
-    });
-
-    // Queue length rule
-    this.addRule({
-      id: 'long_queue',
-      name: 'Long Queue',
-      description: 'Queue length exceeds 50 items',
-      severity: 'warning',
-      condition: () => this.getQueueLength() > 50
-    });
-  }
-
-  private getErrorRate(): number {
-    // Implementation would get actual error rate from metrics
-    return 0;
-  }
-
-  private getAverageResponseTime(): number {
-    // Implementation would get actual response time from metrics
-    return 0;
-  }
-
-  private getQueueLength(): number {
-    // Implementation would get actual queue length from metrics
-    return 0;
-  }
-
-  clearAlerts(): void {
-    this.alerts = [];
-    this.subscribers.forEach(callback => callback([]));
-  }
-
-  getActiveAlerts(): Alert[] {
-    return [...this.alerts];
-  }
-
-  cleanup(): void {
-    this.rules.clear();
-    this.alerts = [];
-    this.subscribers.clear();
-    this.cache.clear();
-  }
-
-  unsubscribe(): void {
-    this.subscribers.clear();
   }
 } 

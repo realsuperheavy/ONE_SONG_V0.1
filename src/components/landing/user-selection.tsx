@@ -6,6 +6,8 @@ import { Users, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DJAuthForm } from '@/components/dj/auth/dj-auth-form';
 import { useRouter } from 'next/navigation';
+import { useTouchInteraction } from '@/hooks/useTouchInteraction';
+import { TouchEvent as ReactTouchEvent } from 'react';
 
 interface UserSelectionProps {
   selectedType: 'attendee' | 'dj' | null;
@@ -15,6 +17,22 @@ interface UserSelectionProps {
 export function UserSelection({ selectedType, onSelect }: UserSelectionProps) {
   const [showDJAuth, setShowDJAuth] = useState(false);
   const router = useRouter();
+
+  const { touchHandlers } = useTouchInteraction({
+    onSwipe: (direction) => {
+      if (direction === 'left' && selectedType === 'attendee') {
+        handleDJCardClick();
+      } else if (direction === 'right' && selectedType === 'dj') {
+        onSelect('attendee');
+      }
+    }
+  }) as {
+    touchHandlers: {
+      onTouchStart: (e: ReactTouchEvent<Element>) => void;
+      onTouchEnd: (e: ReactTouchEvent<Element>) => void;
+      onTouchCancel: () => void;
+    }
+  };
 
   const handleDJCardClick = () => {
     onSelect('dj');
@@ -28,7 +46,10 @@ export function UserSelection({ selectedType, onSelect }: UserSelectionProps) {
 
   return (
     <>
-      <div className="grid gap-4 animate-in fade-in-50 duration-500">
+      <div 
+        className="grid gap-4 animate-in fade-in-50 duration-500"
+        {...touchHandlers}
+      >
         <Card
           className={cn(
             "p-6 cursor-pointer transition-all duration-300",

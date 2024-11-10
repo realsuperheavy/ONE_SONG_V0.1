@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -11,6 +11,7 @@ import { FeatureSection } from './feature-section';
 import { UserSelection } from './user-selection';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import { PhoneAuthForm } from '@/components/auth/phone-auth-form';
 
 interface LiveEvent {
   id: string;
@@ -23,14 +24,14 @@ interface LiveEvent {
 
 export function LandingPage() {
   const [selectedUserType, setSelectedUserType] = useState<'attendee' | 'dj' | null>(null);
-  const [eventCode, setEventCode] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [nearbyEvents, setNearbyEvents] = useState<LiveEvent[]>([]);
   const backgroundRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
-  const { toast } = useToast();
+  const router = useRouter();
+  const { showToast } = useToast();
+  const [eventCode, setEventCode] = useState('');
 
   // Mouse tracking effect for interactive background
   useEffect(() => {
@@ -82,18 +83,17 @@ export function LandingPage() {
 
   const handleUserTypeSelect = (type: 'attendee' | 'dj') => {
     setSelectedUserType(type);
+    if (type === 'dj') {
+      router.push('/auth/phone');
+    }
   };
 
   const handleJoinEvent = async (code: string) => {
     setIsSubmitting(true);
     try {
-      navigate(`/event/${code}`);
+      router.push(`/event/${code}`);
     } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Invalid event code. Please try again.'
-      });
+      showToast("Error message", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -145,37 +145,11 @@ export function LandingPage() {
           {/* Event Code Input */}
           {selectedUserType === 'attendee' && (
             <div className="space-y-4 animate-in fade-in-50 slide-in-from-bottom-5">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="relative group">
-                  <Input
-                    type="text"
-                    placeholder="Enter event code"
-                    value={eventCode}
-                    onChange={(e) => setEventCode(e.target.value.toUpperCase())}
-                    className={cn(
-                      "text-center text-xl tracking-widest h-14",
-                      "transition-all duration-300",
-                      "focus:shadow-[0_0_0_2px_hsl(var(--primary))]",
-                      "placeholder:text-muted-foreground/50",
-                      "group-hover:shadow-[0_0_30px_-5px_hsl(var(--primary))]"
-                    )}
-                    maxLength={6}
-                    disabled={isSubmitting}
-                  />
-                </div>
-                <Button 
-                  type="submit" 
-                  className="w-full h-14 text-lg font-medium"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? 'Joining...' : (
-                    <>
-                      Join Event
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </>
-                  )}
-                </Button>
-              </form>
+              <PhoneAuthForm 
+                onSuccess={(userId) => {
+                  router.push(`/attendee/${userId}`);
+                }}
+              />
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">

@@ -1,143 +1,174 @@
-import { ref, onValue, serverTimestamp } from 'firebase/database';
+import { ref, onValue, serverTimestamp } from '@firebase/database';
 import { rtdb } from '@/lib/firebase/config';
-import { CustomMetricsManager } from './CustomMetricsManager';
-import { AlertSystem } from './AlertSystem';
-import { Cache } from '@/lib/cache';
 import { analyticsService } from '@/lib/firebase/services/analytics';
+import { AlertSystem, AlertRule } from '@/lib/analytics/AlertSystem';
+import { CustomMetricsManager } from '@/lib/analytics/CustomMetricsManager';
 
-export interface RealTimeAnalyticsConfig {
-  updateInterval?: number;
-  metricsManager: CustomMetricsManager;
-  alertSystem: AlertSystem;
-  maxRetries?: number;
-  batchSize?: number;
+interface AnalyticsConfig {
+  eventId: string;
+  alertThresholds?: {
+    errorRate?: number;
+    responseTime?: number;
+    queueSize?: number;
+  };
+  metricConfigs?: {
+    retention?: number;  // Data retention in days
+    sampleRate?: number; // Sampling rate (0-1)
+  };
 }
 
 export class RealTimeAnalytics {
-  private metricsManager: CustomMetricsManager;
-  private alertSystem: AlertSystem;
-  private cache: Cache<any>;
-  private listeners: Map<string, () => void>;
-  private updateInterval: number;
-  private readonly BATCH_SIZE = 100;
+  private readonly eventId: string;
+  private readonly alertSystem: AlertSystem;
+  private readonly metricsManager: CustomMetricsManager;
+  private listeners: Map<string, () => void> = new Map();
 
-  constructor(config: RealTimeAnalyticsConfig) {
-    this.metricsManager = config.metricsManager;
-    this.alertSystem = config.alertSystem;
-    this.cache = new Cache({ maxSize: 1000, ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.listeners = new Map();
-    this.updateInterval = config.updateInterval || 1000; // 1 second default
-    
-    this.startPeriodicUpdates();
+  constructor(config: AnalyticsConfig) {
+    this.eventId = config.eventId;
+    this.alertSystem = new AlertSystem();
+    this.metricsManager = new CustomMetricsManager(config.eventId);
+
+    this.initializeAlertRules(config.alertThresholds);
+    this.initializeMetrics(config.metricConfigs);
   }
 
-  async trackEventMetrics(eventId: string): Promise<void> {
-    if (this.listeners.has(eventId)) return;
-
-    const unsubscribe = onValue(
-      ref(rtdb, `events/${eventId}/metrics`),
-      async (snapshot) => {
-        const metrics = snapshot.val();
-        if (!metrics) return;
-
-        try {
-          await this.processMetrics(eventId, metrics);
-        } catch (error) {
-          analyticsService.trackError(error as Error, {
-            context: 'real_time_analytics',
-            eventId
-          });
-        }
-      }
-    );
-
-    this.listeners.set(eventId, unsubscribe);
-  }
-
-  async stopTracking(eventId: string): Promise<void> {
-    const unsubscribe = this.listeners.get(eventId);
-    if (unsubscribe) {
-      unsubscribe();
-      this.listeners.delete(eventId);
-    }
-  }
-
-  private async processMetrics(eventId: string, metrics: any): Promise<void> {
-    const cacheKey = `metrics_${eventId}_${Date.now()}`;
-    const cachedMetrics = this.cache.get(cacheKey);
-
-    if (cachedMetrics) {
-      return;
-    }
-
-    // Process new metrics
-    const processedMetrics = {
-      requestRate: this.calculateRequestRate(metrics.requests),
-      queueLength: metrics.queue?.length || 0,
-      activeUsers: metrics.activeUsers || 0,
-      errorRate: this.calculateErrorRate(metrics.errors),
-      averageResponseTime: this.calculateAverageResponseTime(metrics.responseTimes)
-    };
-
-    // Track metrics
-    Object.entries(processedMetrics).forEach(([key, value]) => {
-      this.metricsManager.trackMetric(key, value);
-    });
-
-    // Check for alerts
-    if (processedMetrics.errorRate > 0.1) { // 10% error rate threshold
-      this.alertSystem.addRule({
-        id: `high_error_rate_${eventId}`,
+  /**
+   * Initialize alert rules based on thresholds
+   */
+  private initializeAlertRules(thresholds: AnalyticsConfig['alertThresholds'] = {}): void {
+    const rules: AlertRule[] = [
+      {
+        id: 'error_rate',
         name: 'High Error Rate',
-        description: `Error rate of ${processedMetrics.errorRate * 100}% detected`,
-        condition: () => processedMetrics.errorRate > 0.1,
-        severity: 'error'
-      });
-    }
+        description: 'Error rate exceeded threshold',
+        condition: async () => {
+          const stats = await this.metricsManager.getMetricStats('error_rate', Date.now() - 300000);
+          return stats.avg > (thresholds.errorRate || 0.05);
+        },
+        severity: 'warning',
+        throttleMs: 300000 // 5 minutes
+      },
+      {
+        id: 'response_time',
+        name: 'High Response Time',
+        description: 'Response time exceeded threshold',
+        condition: async () => {
+          const stats = await this.metricsManager.getMetricStats('response_time', Date.now() - 60000);
+          return stats.avg > (thresholds.responseTime || 1000);
+        },
+        severity: 'warning',
+        throttleMs: 60000 // 1 minute
+      },
+      {
+        id: 'queue_size',
+        name: 'Queue Size Warning',
+        description: 'Queue size approaching limit',
+        condition: async () => {
+          const stats = await this.metricsManager.getMetricStats('queue_size', Date.now() - 60000);
+          return stats.avg > (thresholds.queueSize || 45);
+        },
+        severity: 'warning',
+        throttleMs: 120000 // 2 minutes
+      }
+    ];
 
-    // Cache processed metrics
-    this.cache.set(cacheKey, processedMetrics);
+    rules.forEach(rule => this.alertSystem.addRule(rule));
+  }
 
-    // Persist to analytics
-    await analyticsService.trackEvent('real_time_metrics', {
-      eventId,
-      metrics: processedMetrics,
-      timestamp: serverTimestamp()
+  /**
+   * Initialize metrics collection
+   */
+  private initializeMetrics(config: AnalyticsConfig['metricConfigs'] = {}): void {
+    const metrics = [
+      {
+        name: 'error_rate',
+        type: 'gauge' as const,
+        description: 'Rate of errors in the system'
+      },
+      {
+        name: 'response_time',
+        type: 'histogram' as const,
+        description: 'API response times',
+        unit: 'ms'
+      },
+      {
+        name: 'queue_size',
+        type: 'gauge' as const,
+        description: 'Current size of the request queue'
+      },
+      {
+        name: 'request_rate',
+        type: 'counter' as const,
+        description: 'Rate of incoming requests'
+      }
+    ];
+
+    metrics.forEach(metric => this.metricsManager.registerMetric(metric));
+  }
+
+  /**
+   * Start monitoring analytics
+   */
+  startMonitoring(): void {
+    this.alertSystem.startMonitoring();
+    this.setupMetricListeners();
+
+    analyticsService.trackEvent('analytics_monitoring_started', {
+      eventId: this.eventId,
+      timestamp: Date.now()
     });
   }
 
-  private calculateRequestRate(requests: any[]): number {
-    if (!requests?.length) return 0;
-    const recentRequests = requests.filter(r => 
-      Date.now() - r.timestamp < 60000 // Last minute
-    );
-    return recentRequests.length / 60; // Requests per second
-  }
-
-  private calculateErrorRate(errors: any[]): number {
-    if (!errors?.length) return 0;
-    const recentErrors = errors.filter(e => 
-      Date.now() - e.timestamp < 300000 // Last 5 minutes
-    );
-    return recentErrors.length / errors.length;
-  }
-
-  private calculateAverageResponseTime(times: number[]): number {
-    if (!times?.length) return 0;
-    return times.reduce((a, b) => a + b, 0) / times.length;
-  }
-
-  private startPeriodicUpdates(): void {
-    setInterval(() => {
-      this.listeners.forEach((_, eventId) => {
-        this.processMetrics(eventId, {});
-      });
-    }, this.updateInterval);
-  }
-
-  cleanup(): void {
+  /**
+   * Stop monitoring analytics
+   */
+  stopMonitoring(): void {
+    this.alertSystem.stopMonitoring();
     this.listeners.forEach(unsubscribe => unsubscribe());
     this.listeners.clear();
-    this.cache.clear();
+
+    analyticsService.trackEvent('analytics_monitoring_stopped', {
+      eventId: this.eventId,
+      timestamp: Date.now()
+    });
+  }
+
+  /**
+   * Setup real-time metric listeners
+   */
+  private setupMetricListeners(): void {
+    // Monitor queue size
+    const queueRef = ref(rtdb, `queue/${this.eventId}`);
+    const queueUnsubscribe = onValue(queueRef, snapshot => {
+      const queueSize = snapshot.size();
+      this.metricsManager.recordMetric('queue_size', queueSize);
+    });
+    this.listeners.set('queue_size', queueUnsubscribe);
+
+    // Monitor request rate
+    const requestsRef = ref(rtdb, `requests/${this.eventId}`);
+    const requestsUnsubscribe = onValue(requestsRef, snapshot => {
+      const requestCount = snapshot.size();
+      this.metricsManager.recordMetric('request_rate', requestCount);
+    });
+    this.listeners.set('request_rate', requestsUnsubscribe);
+  }
+
+  /**
+   * Record response time metric
+   */
+  recordResponseTime(duration: number): void {
+    this.metricsManager.recordMetric('response_time', duration);
+  }
+
+  /**
+   * Record error occurrence
+   */
+  recordError(error: Error): void {
+    this.metricsManager.recordMetric('error_rate', 1);
+    analyticsService.trackError(error, {
+      context: 'real_time_analytics',
+      eventId: this.eventId
+    });
   }
 } 

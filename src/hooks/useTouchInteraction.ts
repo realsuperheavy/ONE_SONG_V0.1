@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'react';
+import { TouchEvent } from 'react';
 
 interface TouchOptions {
   onSwipe?: (direction: 'left' | 'right' | 'up' | 'down') => void;
@@ -8,7 +9,7 @@ interface TouchOptions {
   longPressDelay?: number;
 }
 
-export const useTouchInteraction = (options: TouchOptions = {}) => {
+export const useTouchInteraction = <T extends Element>(options: TouchOptions = {}) => {
   const {
     onSwipe,
     onTap,
@@ -20,7 +21,7 @@ export const useTouchInteraction = (options: TouchOptions = {}) => {
   const touchStart = useRef<{ x: number; y: number; time: number } | null>(null);
   const longPressTimer = useRef<NodeJS.Timeout>();
 
-  const handleTouchStart = (e: TouchEvent) => {
+  const handleTouchStart = (e: TouchEvent<T>) => {
     const touch = e.touches[0];
     touchStart.current = {
       x: touch.clientX,
@@ -33,7 +34,7 @@ export const useTouchInteraction = (options: TouchOptions = {}) => {
     }
   };
 
-  const handleTouchEnd = (e: TouchEvent) => {
+  const handleTouchEnd = (e: TouchEvent<T>) => {
     if (!touchStart.current) return;
 
     clearTimeout(longPressTimer.current);

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { analyticsService } from '@/lib/firebase/services/analytics';
+import { DateRange } from 'react-day-picker';
 
 interface RequestAnalytics {
   totalRequests: number;
@@ -11,17 +12,12 @@ interface RequestAnalytics {
   averageResponseTime: number;
 }
 
-interface TimeRange {
-  start: Date;
-  end: Date;
-}
-
-interface AnalyticsState {
+export interface AnalyticsState {
   analytics: RequestAnalytics | null;
   loading: boolean;
   error: string | null;
-  timeRange: TimeRange | null;
-  setTimeRange: (range: TimeRange | null) => void;
+  timeRange: DateRange | undefined;
+  setTimeRange: (range: DateRange | undefined) => void;
   fetchAnalytics: (eventId: string) => Promise<void>;
 }
 
@@ -29,7 +25,7 @@ export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
   analytics: null,
   loading: false,
   error: null,
-  timeRange: null,
+  timeRange: undefined,
 
   setTimeRange: (range) => set({ timeRange: range }),
 

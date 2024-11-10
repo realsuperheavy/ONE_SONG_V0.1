@@ -8,7 +8,8 @@ import {
   where, 
   onSnapshot,
   orderBy,
-  writeBatch
+  writeBatch,
+  DocumentData
 } from '@firebase/firestore';
 import { db } from '../config';
 import { SongRequest } from '@/types/models';
@@ -16,13 +17,14 @@ import { SongRequest } from '@/types/models';
 export interface QueueItem extends SongRequest {
   queuePosition: number;
   addedAt: string;
+  id: string;
 }
 
 export const queueService = {
   addToQueue: async (request: SongRequest): Promise<string> => {
     try {
       const queueRef = collection(db, 'queues');
-      const queueItem: QueueItem = {
+      const queueItem: Omit<QueueItem, 'id'> = {
         ...request,
         queuePosition: 0, // Will be updated in batch
         addedAt: new Date().toISOString()
@@ -70,10 +72,13 @@ export const queueService = {
     );
 
     return onSnapshot(queueQuery, (snapshot) => {
-      const queue = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as QueueItem[];
+      const queue = snapshot.docs.map(doc => {
+        const data = doc.data() as Omit<QueueItem, 'id'>;
+        return {
+          id: doc.id,
+          ...data
+        };
+      });
       callback(queue);
     });
   }

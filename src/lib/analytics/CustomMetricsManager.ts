@@ -1,164 +1,188 @@
+import { ref, set, get, query, orderByChild, limitToLast } from '@firebase/database';
+import { rtdb } from '@/lib/firebase/config';
 import { analyticsService } from '@/lib/firebase/services/analytics';
 import { Cache } from '@/lib/cache';
 
-interface CustomMetric {
-  id: string;
+interface MetricConfig {
   name: string;
-  value: number;
-  description?: string;
-  threshold?: number;
-  history?: number[];
-  category: 'performance' | 'business' | 'user' | 'system';
-  aggregation: 'sum' | 'average' | 'max' | 'min' | 'last';
-  retention: number; // In milliseconds
+  description: string;
+  aggregationType: 'sum' | 'average' | 'max' | 'min' | 'count';
+  retentionDays: number;
+  alertThresholds?: {
+    warning?: number;
+    error?: number;
+    critical?: number;
+  };
 }
 
-export interface MetricsUpdateCallback<T> {
-  (metrics: T): void;
+interface MetricDataPoint {
+  value: number;
+  timestamp: number;
+  metadata?: Record<string, any>;
 }
 
 export class CustomMetricsManager {
-  private metrics: Map<string, CustomMetric>;
-  private cache: Cache<number[]>;
-  private updateInterval: number;
-  private intervalId: NodeJS.Timeout | null = null;
+  private metricsCache: Cache<MetricDataPoint[]>;
+  private configs: Map<string, MetricConfig> = new Map();
 
-  constructor(config: {
-    updateInterval?: number;
-    cacheSize?: number;
-    cacheTTL?: number;
-  }) {
-    this.metrics = new Map();
-    this.cache = new Cache({
-      maxSize: config.cacheSize || 1000,
-      ttl: config.cacheTTL || 24 * 60 * 60 * 1000
-    });
-    this.updateInterval = config.updateInterval || 5000; // 5 seconds default
-  }
-
-  registerMetric(metric: Omit<CustomMetric, 'value' | 'history'>): void {
-    this.metrics.set(metric.id, {
-      ...metric,
-      value: 0,
-      history: []
+  constructor() {
+    this.metricsCache = new Cache<MetricDataPoint[]>({ 
+      maxSize: 1000,
+      ttl: 60 * 60 * 1000 // 1 hour
     });
   }
 
-  trackMetric(metricId: string, value: number): void {
-    const metric = this.metrics.get(metricId);
-    if (!metric) {
-      console.warn(`Metric ${metricId} not registered`);
-      return;
+  /**
+   * Register a new custom metric
+   */
+  registerMetric(config: MetricConfig): void {
+    this.configs.set(config.name, config);
+  }
+
+  /**
+   * Record a metric value
+   */
+  async recordMetric(name: string, value: number, metadata?: Record<string, any>): Promise<void> {
+    const config = this.configs.get(name);
+    if (!config) {
+      throw new Error(`Metric ${name} not registered`);
     }
 
-    // Update current value based on aggregation type
-    switch (metric.aggregation) {
-      case 'sum':
-        metric.value += value;
-        break;
-      case 'average':
-        const history = metric.history || [];
-        metric.value = (history.reduce((a, b) => a + b, value)) / (history.length + 1);
-        break;
-      case 'max':
-        metric.value = Math.max(metric.value, value);
-        break;
-      case 'min':
-        metric.value = Math.min(metric.value, value);
-        break;
-      case 'last':
-        metric.value = value;
-        break;
-    }
-
-    // Update history
-    metric.history = [...(metric.history || []), value].slice(-100); // Keep last 100 values
-
-    // Check threshold
-    if (metric.threshold && value > metric.threshold) {
-      analyticsService.trackEvent('metric_threshold_exceeded', {
-        metricId,
-        value,
-        threshold: metric.threshold,
-        timestamp: Date.now()
-      });
-    }
-
-    // Cache the update
-    this.cacheMetricValue(metricId, value);
-  }
-
-  getMetric(metricId: string): CustomMetric | undefined {
-    return this.metrics.get(metricId);
-  }
-
-  getAllMetrics(): CustomMetric[] {
-    return Array.from(this.metrics.values());
-  }
-
-  getMetricsByCategory(category: CustomMetric['category']): CustomMetric[] {
-    return Array.from(this.metrics.values()).filter(
-      metric => metric.category === category
-    );
-  }
-
-  startTracking(): void {
-    if (this.intervalId) return;
-
-    this.intervalId = setInterval(() => {
-      this.flushMetricsToAnalytics();
-    }, this.updateInterval);
-  }
-
-  stopTracking(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
-  }
-
-  private async flushMetricsToAnalytics(): Promise<void> {
-    const metrics = this.getAllMetrics();
-    const batch = metrics.map(metric => ({
-      name: metric.name,
-      value: metric.value,
-      category: metric.category,
-      timestamp: Date.now()
-    }));
+    const dataPoint: MetricDataPoint = {
+      value,
+      timestamp: Date.now(),
+      metadata
+    };
 
     try {
-      await analyticsService.trackMetricsBatch(batch);
+      // Store in Firebase RTDB
+      const metricRef = ref(rtdb, `metrics/${name}/${dataPoint.timestamp}`);
+      await set(metricRef, dataPoint);
+
+      // Update cache
+      const cached = await this.metricsCache.get(name) || [];
+      cached.push(dataPoint);
+      await this.metricsCache.set(name, cached);
+
+      // Track in analytics
+      analyticsService.trackEvent('metric_recorded', {
+        metricName: name,
+        value,
+        metadata
+      });
+
+      // Check alert thresholds
+      await this.checkThresholds(name, value);
     } catch (error) {
-      console.error('Failed to flush metrics:', error);
-      // Cache failed batch for retry
-      this.cache.set(`failed_batch_${Date.now()}`, batch);
+      analyticsService.trackError(error as Error, {
+        context: 'record_metric',
+        metricName: name
+      });
+      throw error;
     }
   }
 
-  private cacheMetricValue(metricId: string, value: number): void {
-    const cacheKey = `metric_${metricId}_${Date.now()}`;
-    this.cache.set(cacheKey, value);
-  }
-
-  async retryFailedUpdates(): Promise<void> {
-    const failedBatches = Array.from(this.cache.entries())
-      .filter(([key]) => key.startsWith('failed_batch_'));
-
-    for (const [key, batch] of failedBatches) {
-      try {
-        await analyticsService.trackMetricsBatch(batch);
-        this.cache.delete(key);
-      } catch (error) {
-        console.error(`Failed to retry batch ${key}:`, error);
+  /**
+   * Get metric values for a time range
+   */
+  async getMetricValues(name: string, startTime: number, endTime: number): Promise<MetricDataPoint[]> {
+    try {
+      // Try cache first
+      const cached = await this.metricsCache.get(name);
+      if (cached) {
+        return cached.filter(point => 
+          point.timestamp >= startTime && point.timestamp <= endTime
+        );
       }
+
+      // Fetch from Firebase if not in cache
+      const metricRef = ref(rtdb, `metrics/${name}`);
+      const metricsQuery = query(
+        metricRef,
+        orderByChild('timestamp'),
+        limitToLast(1000) // Adjust based on needs
+      );
+
+      const snapshot = await get(metricsQuery);
+      const data = snapshot.val() || {};
+
+      const points = Object.values(data) as MetricDataPoint[];
+      const filtered = points.filter(point =>
+        point.timestamp >= startTime && point.timestamp <= endTime
+      );
+
+      // Update cache
+      await this.metricsCache.set(name, filtered);
+
+      return filtered;
+    } catch (error) {
+      analyticsService.trackError(error as Error, {
+        context: 'get_metric_values',
+        metricName: name
+      });
+      throw error;
     }
   }
 
-  subscribe<T>(callback: MetricsUpdateCallback<T>): () => void {
-    // ... implementation
+  /**
+   * Calculate aggregated metric value
+   */
+  async calculateMetricAggregate(name: string, timeRange: number): Promise<number> {
+    const config = this.configs.get(name);
+    if (!config) {
+      throw new Error(`Metric ${name} not registered`);
+    }
+
+    const endTime = Date.now();
+    const startTime = endTime - timeRange;
+    const points = await this.getMetricValues(name, startTime, endTime);
+
+    switch (config.aggregationType) {
+      case 'sum':
+        return points.reduce((sum, point) => sum + point.value, 0);
+      case 'average':
+        return points.length > 0 
+          ? points.reduce((sum, point) => sum + point.value, 0) / points.length 
+          : 0;
+      case 'max':
+        return points.length > 0 
+          ? Math.max(...points.map(point => point.value))
+          : 0;
+      case 'min':
+        return points.length > 0 
+          ? Math.min(...points.map(point => point.value))
+          : 0;
+      case 'count':
+        return points.length;
+      default:
+        throw new Error(`Unknown aggregation type: ${config.aggregationType}`);
+    }
   }
 
-  onMetricsUpdate<T>(callback: MetricsUpdateCallback<T>): () => void {
-    return this.subscribe(callback);
+  private async checkThresholds(name: string, value: number): Promise<void> {
+    const config = this.configs.get(name);
+    if (!config?.alertThresholds) return;
+
+    const { critical, error, warning } = config.alertThresholds;
+
+    if (critical !== undefined && value >= critical) {
+      analyticsService.trackEvent('metric_threshold_exceeded', {
+        metricName: name,
+        threshold: 'critical',
+        value
+      });
+    } else if (error !== undefined && value >= error) {
+      analyticsService.trackEvent('metric_threshold_exceeded', {
+        metricName: name,
+        threshold: 'error',
+        value
+      });
+    } else if (warning !== undefined && value >= warning) {
+      analyticsService.trackEvent('metric_threshold_exceeded', {
+        metricName: name,
+        threshold: 'warning',
+        value
+      });
+    }
   }
 } 

@@ -1,103 +1,107 @@
 import { useState } from 'react';
-import { useEventData } from '@/hooks/useEventData';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { QueueManager } from '../queue/QueueManager';
-import { RequestManager } from '../requests/RequestManager';
-import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
-import { ResponsiveContainer } from '../ui/ResponsiveContainer';
-import { NavItem } from '../ui/NavItem';
-import { QueueIcon, RequestIcon, AnalyticsIcon } from 'lucide-react';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { cn } from '@/lib/utils';
+import { RequestList } from '../requests/RequestList';
+import { AnalyticsPanel } from '@/components/analytics/AnalyticsPanel';
+import { EventSettings } from './settings/EventSettings';
+import { useEventData } from '@/hooks/useEventData';
+import { 
+  ListMusic, 
+  MessageSquare, 
+  BarChart,
+  Settings,
+  Users 
+} from 'lucide-react';
+import type { Event } from '@/types/models';
 
 interface DJDashboardProps {
   eventId: string;
 }
 
-export const DJDashboard: React.FC<DJDashboardProps> = ({ eventId }) => {
-  const [activeView, setActiveView] = useState<'queue' | 'requests' | 'analytics'>('queue');
-  const { event, requests, queue } = useEventData(eventId);
-  const isMobile = useMediaQuery('(max-width: 768px)');
+export function Dashboard({ eventId }: DJDashboardProps) {
+  const { event, isLoading, updateEvent } = useEventData(eventId);
+  const [activeTab, setActiveTab] = useState('queue');
 
-  const handleViewChange = (view: typeof activeView) => {
-    setActiveView(view);
-  };
+  if (isLoading || !event) {
+    return <DashboardSkeleton />;
+  }
 
   return (
-    <ResponsiveContainer maxWidth="2xl" className="min-h-screen">
-      <div className={cn(
-        'grid gap-4',
-        isMobile ? 'grid-cols-1' : 'grid-cols-12'
-      )}>
-        {/* Navigation */}
-        <nav
-          className={cn(
-            'flex space-x-2 md:space-x-0 md:space-y-2',
-            isMobile ? 'col-span-1 overflow-x-auto pb-2' : 'col-span-2 flex-col'
-          )}
-          role="navigation"
-          aria-label="Main navigation"
-        >
-          <NavItem
-            active={activeView === 'queue'}
-            onClick={() => handleViewChange('queue')}
-            icon={<QueueIcon aria-hidden="true" />}
-            label="Queue"
-            aria-current={activeView === 'queue' ? 'page' : undefined}
-          />
-          <NavItem
-            active={activeView === 'requests'}
-            onClick={() => handleViewChange('requests')}
-            icon={<RequestIcon aria-hidden="true" />}
-            label="Requests"
-            aria-current={activeView === 'requests' ? 'page' : undefined}
-          />
-          <NavItem
-            active={activeView === 'analytics'}
-            onClick={() => handleViewChange('analytics')}
-            icon={<AnalyticsIcon aria-hidden="true" />}
-            label="Analytics"
-            aria-current={activeView === 'analytics' ? 'page' : undefined}
-          />
-        </nav>
+    <div className="min-h-screen bg-[#1E1E1E]">
+      <header className="fixed top-0 left-0 right-0 h-[60px] bg-[#1E1E1E] border-b border-white/10 z-50">
+        <div className="container h-full flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <h1 className="text-xl font-bold text-white">{event.details.name}</h1>
+            <Badge variant="secondary" className="bg-[#2E2F2E]">
+              {event.details.status}
+            </Badge>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1 text-gray-400">
+              <Users size={16} />
+              <span>{event.stats.attendeeCount}</span>
+            </div>
+          </div>
+        </div>
+      </header>
 
-        {/* Main Content */}
-        <main
-          className={cn(
-            'bg-background-light rounded-lg p-4',
-            isMobile ? 'col-span-1' : 'col-span-10'
-          )}
-          role="main"
-          aria-live="polite"
-        >
-          {activeView === 'queue' && (
-            <section aria-label="Queue Management">
-              <QueueManager 
-                queue={queue} 
-                onReorder={handleQueueReorder}
-                aria-label="Song queue"
-              />
-            </section>
-          )}
-          {activeView === 'requests' && (
-            <section aria-label="Request Management">
-              <RequestManager
-                requests={requests}
-                onApprove={handleRequestApproval}
-                onReject={handleRequestRejection}
-                aria-label="Song requests"
-              />
-            </section>
-          )}
-          {activeView === 'analytics' && (
-            <section aria-label="Analytics Dashboard">
-              <AnalyticsPanel 
-                eventId={eventId}
-                aria-label="Event analytics"
-              />
-            </section>
-          )}
-        </main>
+      <div className="pt-[60px] container">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <div className="sticky top-[60px] bg-[#1E1E1E] border-b border-white/10 z-40">
+            <TabsList className="p-0">
+              <TabsTrigger value="queue" className="flex items-center space-x-2">
+                <ListMusic size={16} />
+                <span>Queue</span>
+              </TabsTrigger>
+              <TabsTrigger value="requests" className="flex items-center space-x-2">
+                <MessageSquare size={16} />
+                <span>Requests</span>
+              </TabsTrigger>
+              <TabsTrigger value="analytics" className="flex items-center space-x-2">
+                <BarChart size={16} />
+                <span>Analytics</span>
+              </TabsTrigger>
+              <TabsTrigger value="settings" className="flex items-center space-x-2">
+                <Settings size={16} />
+                <span>Settings</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <div className="py-6">
+            <TabsContent value="queue">
+              <QueueManager eventId={eventId} />
+            </TabsContent>
+            <TabsContent value="requests">
+              <RequestList eventId={eventId} />
+            </TabsContent>
+            <TabsContent value="analytics">
+              <AnalyticsPanel eventId={eventId} />
+            </TabsContent>
+            <TabsContent value="settings">
+              <EventSettings event={event} onUpdate={updateEvent} />
+            </TabsContent>
+          </div>
+        </Tabs>
       </div>
-    </ResponsiveContainer>
+    </div>
   );
-}; 
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="min-h-screen bg-[#1E1E1E] animate-pulse">
+      <div className="h-[60px] bg-[#2E2F2E]" />
+      <div className="container py-6">
+        <div className="h-10 bg-[#2E2F2E] rounded-lg w-[200px] mb-6" />
+        <div className="grid gap-6">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-32 bg-[#2E2F2E] rounded-lg" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+} 

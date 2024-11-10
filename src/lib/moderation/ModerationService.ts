@@ -10,6 +10,11 @@ interface ContentRule {
   severity: 'low' | 'medium' | 'high';
   action: 'flag' | 'block' | 'review';
   category: 'profanity' | 'spam' | 'inappropriate' | 'custom';
+  metadata?: {
+    confidence: number;
+    lastUpdated: string;
+    createdBy: string;
+  };
 }
 
 interface ReviewItem {
@@ -67,7 +72,7 @@ export class ModerationService {
       const rules = snapshot.val() || {};
 
       Object.entries(rules).forEach(([id, rule]) => {
-        this.rules.set(id, { id, ...rule as ContentRule });
+        this.rules.set(id, { ...rule as ContentRule, id });
       });
 
       analyticsService.trackEvent('moderation_rules_loaded', {
@@ -303,7 +308,7 @@ export class ModerationService {
   }
 
   private async applyModerationAction(action: ModerationAction): Promise<void> {
-    const updates = {
+    const updates: Record<string, any> = {
       [`users/${action.userId}/moderation`]: {
         status: action.type,
         expiresAt: action.expiresAt,

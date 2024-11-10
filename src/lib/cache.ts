@@ -46,4 +46,15 @@ export class Cache<T> {
   delete(key: string): void {
     this.cache.delete(key);
   }
-} 
+
+  async getValues(): Promise<T[]> {
+    return Array.from(this.cache.values()).map(item => item.value);
+  }
+
+  async getAll(): Promise<Map<string, T>> {
+    const entries = Array.from(this.cache.entries()).map(
+      ([key, item]) => [key, item.value] as [string, T]
+    );
+    return new Map(entries);
+  }
+}
