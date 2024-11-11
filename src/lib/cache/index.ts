@@ -1,48 +1,45 @@
-export interface Cache<T> {
-  get: (key: string) => Promise<T | null>;
-  set: (key: string, value: T, ttl?: number) => Promise<void>;
-  delete: (key: string) => Promise<void>;
-  getAll: () => Promise<Map<string, T>>;
-  clear: () => Promise<void>;
-}
+import { CacheConfig, CacheEntry } from './types';
 
-export class CacheImplementation<T> implements Cache<T> {
-  private store = new Map<string, { value: T; expiry: number }>();
+export class Cache<T> {
+  private store: Map<string, CacheEntry<T>>;
+  private config: CacheConfig;
+
+  constructor(config: CacheConfig) {
+    this.store = new Map();
+    this.config = {
+      maxSize: 1000,
+      ttl: 3600,
+      ...config
+    };
+  }
 
   async get(key: string): Promise<T | null> {
-    const item = this.store.get(key);
-    if (!item) return null;
-    if (item.expiry < Date.now()) {
+    const entry = this.store.get(key);
+    if (!entry) return null;
+
+    if (Date.now() > entry.expiresAt) {
       this.store.delete(key);
       return null;
     }
-    return item.value;
+
+    return entry.value;
   }
 
-  async set(key: string, value: T, ttl = 3600000): Promise<void> {
+  async set(key: string, value: T, ttl?: number): Promise<void> {
+    if (this.store.size >= (this.config.maxSize || 1000)) {
+      // Remove oldest entry if cache is full
+      const oldestKey = this.store.keys().next().value;
+      this.store.delete(oldestKey);
+    }
+
     this.store.set(key, {
       value,
-      expiry: Date.now() + ttl
+      expiresAt: Date.now() + ((ttl || this.config.ttl || 3600) * 1000)
     });
   }
 
   async delete(key: string): Promise<void> {
     this.store.delete(key);
-  }
-
-  async getAll(): Promise<Map<string, T>> {
-    const now = Date.now();
-    const result = new Map<string, T>();
-    
-    for (const [key, item] of this.store.entries()) {
-      if (item.expiry >= now) {
-        result.set(key, item.value);
-      } else {
-        this.store.delete(key);
-      }
-    }
-    
-    return result;
   }
 
   async clear(): Promise<void> {

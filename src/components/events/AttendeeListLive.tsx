@@ -1,7 +1,8 @@
+'use client';
+
 import { useEffect, useState } from 'react';
 import { Avatar } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { adminDb } from '@/lib/firebase/admin';
 import { analyticsService } from '@/lib/firebase/services/analytics';
 import type { UserProfile } from '@/types/models';
 
@@ -20,54 +21,32 @@ export function AttendeeListLive({ eventId, maxHeight = '400px' }: Props) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const attendeesRef = adminDb
-      .collection('events')
-      .doc(eventId)
-      .collection('attendees');
+    const fetchAttendees = async () => {
+      try {
+        const response = await fetch(`/api/events/${eventId}/attendees`);
+        if (!response.ok) throw new Error('Failed to fetch attendees');
+        
+        const data = await response.json();
+        setAttendees(data.map((attendee: any) => ({
+          ...attendee,
+          status: Date.now() - new Date(attendee.lastActive).getTime() < 300000 
+            ? 'online' 
+            : 'offline'
+        })));
+      } catch (error) {
+        console.error('Error fetching attendees:', error);
+        analyticsService.trackError(error as Error, {
+          context: 'attendee_list_fetch'
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    const unsubscribe = attendeesRef
-      .where('status', '==', 'active')
-      .onSnapshot(
-        (snapshot) => {
-          const updates: AttendeeWithStatus[] = [];
-          
-          snapshot.docChanges().forEach((change) => {
-            if (change.type === 'added' || change.type === 'modified') {
-              const data = change.doc.data();
-              updates.push({
-                ...data,
-                id: change.doc.id,
-                status: Date.now() - data.lastActive.toMillis() < 300000 ? 'online' : 'offline',
-                lastActive: data.lastActive.toDate()
-              } as AttendeeWithStatus);
-            }
-          });
+    const interval = setInterval(fetchAttendees, 30000); // Refresh every 30 seconds
+    fetchAttendees();
 
-          setAttendees(prev => {
-            const newAttendees = [...prev];
-            updates.forEach(update => {
-              const index = newAttendees.findIndex(a => a.id === update.id);
-              if (index >= 0) {
-                newAttendees[index] = update;
-              } else {
-                newAttendees.push(update);
-              }
-            });
-            return newAttendees;
-          });
-
-          setLoading(false);
-        },
-        (error) => {
-          console.error('Error fetching attendees:', error);
-          analyticsService.trackError(error, {
-            context: 'attendee_list_subscription'
-          });
-          setLoading(false);
-        }
-      );
-
-    return () => unsubscribe();
+    return () => clearInterval(interval);
   }, [eventId]);
 
   return (

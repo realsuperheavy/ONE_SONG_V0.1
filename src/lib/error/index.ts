@@ -1,0 +1,3 @@
+- Create custom error types
+- Add error recovery strategies
+- Enhance error boundary 

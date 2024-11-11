@@ -1,94 +1,56 @@
+import { SpotifyApi } from '@spotify/web-api-ts-sdk';
+import { Cache } from '@/lib/cache';
+import { analyticsService } from '../firebase/services/analytics';
 import type { SpotifyTrack } from '@/types/models';
-
-interface SpotifyTokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-  refresh_token?: string;
-}
-
-interface SpotifyError {
-  error: {
-    status: number;
-    message: string;
-  };
-}
+import { RateLimitService } from '../firebase/services/rate-limit';
+import { AppError } from '@/lib/error/AppError';
 
 export class SpotifyService {
-  private accessToken: string | null = null;
-  private tokenExpiry: number = 0;
-  private refreshToken: string | null = null;
-  private readonly clientId: string;
-  private readonly clientSecret: string;
+  private api: SpotifyApi;
+  private searchCache: Cache<SpotifyTrack[]>;
+  private trackCache: Cache<SpotifyTrack>;
+  private rateLimiter: RateLimitService;
 
   constructor() {
-    this.clientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID!;
-    this.clientSecret = process.env.SPOTIFY_CLIENT_SECRET!;
-  }
-
-  private async refreshAccessToken(): Promise<void> {
-    if (!this.refreshToken) {
-      throw new Error('No refresh token available');
-    }
-
-    try {
-      const response = await fetch('https://accounts.spotify.com/api/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Authorization: `Basic ${Buffer.from(
-            `${this.clientId}:${this.clientSecret}`
-          ).toString('base64')}`,
-        },
-        body: new URLSearchParams({
-          grant_type: 'refresh_token',
-          refresh_token: this.refreshToken,
-        }),
-      });
-
-      const data = await response.json() as SpotifyTokenResponse;
-      this.accessToken = data.access_token;
-      this.tokenExpiry = Date.now() + data.expires_in * 1000;
-    } catch (error) {
-      console.error('Failed to refresh token:', error);
-      throw new Error('Failed to refresh access token');
-    }
-  }
-
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    if (!this.accessToken || Date.now() >= this.tokenExpiry) {
-      await this.refreshAccessToken();
-    }
-
-    const response = await fetch(`https://api.spotify.com/v1${endpoint}`, {
-      ...options,
-      headers: {
-        ...options.headers,
-        Authorization: `Bearer ${this.accessToken}`,
-      },
+    this.api = SpotifyApi.withClientCredentials(
+      process.env.SPOTIFY_CLIENT_ID!,
+      process.env.SPOTIFY_CLIENT_SECRET!
+    );
+    this.searchCache = new Cache<SpotifyTrack[]>({
+      maxSize: 100,
+      ttl: 300 // 5 minutes
     });
-
-    if (!response.ok) {
-      const error = (await response.json()) as SpotifyError;
-      throw new Error(`Spotify API Error: ${error.error.message}`);
-    }
-
-    return response.json() as Promise<T>;
+    this.trackCache = new Cache<SpotifyTrack>({
+      maxSize: 1000,
+      ttl: 3600 // 1 hour
+    });
+    this.rateLimiter = new RateLimitService();
   }
 
-  async searchTracks(query: string): Promise<SpotifyTrack[]> {
+  async searchTracks(query: string, userId: string): Promise<SpotifyTrack[]> {
     try {
-      const data = await this.request<{
-        tracks: { items: any[] };
-      }>(`/search?q=${encodeURIComponent(query)}&type=track&limit=10`);
+      // Check rate limit before search
+      const canProceed = await this.rateLimiter.checkRateLimit(userId, 'search');
+      if (!canProceed) {
+        throw new AppError({
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: 'Search limit exceeded. Please try again later.',
+          context: { userId }
+        });
+      }
 
-      return data.tracks.items.map((track) => ({
+      // Check cache first
+      const cacheKey = `search_${query}`;
+      const cached = await this.searchCache.get(cacheKey);
+      if (cached) return cached;
+
+      // Search using client credentials (no user auth needed)
+      const response = await this.api.search(query, ['track'], 'US', 20);
+      
+      const tracks = response.tracks.items.map(track => ({
         id: track.id,
         name: track.name,
-        artists: track.artists.map((artist: any) => ({
+        artists: track.artists.map(artist => ({
           id: artist.id,
           name: artist.name
         })),
@@ -100,19 +62,40 @@ export class SpotifyService {
         duration_ms: track.duration_ms,
         uri: track.uri
       }));
+
+      // Cache results
+      await this.searchCache.set(cacheKey, tracks, 300); // Cache for 5 minutes
+      return tracks;
+
     } catch (error) {
-      console.error('Search tracks failed:', error);
-      throw error;
+      if (error instanceof AppError) throw error;
+      
+      analyticsService.trackError(error as Error, {
+        context: 'spotify_search',
+        query
+      });
+      throw new AppError({
+        code: 'OPERATION_FAILED',
+        message: 'Search operation failed', 
+        context: { query, error: error instanceof Error ? error.message : String(error) }
+      });
     }
   }
 
   async getTrackDetails(trackId: string): Promise<SpotifyTrack> {
     try {
-      const track = await this.request<any>(`/tracks/${trackId}`);
-      return {
+      // Check cache first
+      const cacheKey = `track_${trackId}`;
+      const cached = await this.trackCache.get(cacheKey);
+      if (cached) return cached;
+
+      // Get track details using client credentials
+      const track = await this.api.tracks.get(trackId);
+      
+      const trackData: SpotifyTrack = {
         id: track.id,
         name: track.name,
-        artists: track.artists.map((artist: any) => ({
+        artists: track.artists.map(artist => ({
           id: artist.id,
           name: artist.name
         })),
@@ -124,92 +107,17 @@ export class SpotifyService {
         duration_ms: track.duration_ms,
         uri: track.uri
       };
+
+      // Cache results
+      await this.trackCache.set(cacheKey, trackData, 3600); // Cache for 1 hour
+      return trackData;
+
     } catch (error) {
-      console.error('Get track details failed:', error);
-      throw error;
-    }
-  }
-
-  async getRecommendations(seedTracks: string[]): Promise<SpotifyTrack[]> {
-    try {
-      const data = await this.request<{ tracks: any[] }>(
-        `/recommendations?seed_tracks=${seedTracks.join(',')}&limit=5`
-      );
-
-      return data.tracks.map((track) => ({
-        id: track.id,
-        name: track.name,
-        artists: track.artists.map((artist: any) => ({
-          id: artist.id,
-          name: artist.name
-        })),
-        album: {
-          id: track.album.id,
-          name: track.album.name,
-          images: track.album.images
-        },
-        duration_ms: track.duration_ms,
-        uri: track.uri
-      }));
-    } catch (error) {
-      console.error('Get recommendations failed:', error);
-      throw error;
-    }
-  }
-
-  async createPlaylist(
-    userId: string,
-    name: string,
-    description?: string
-  ): Promise<string> {
-    try {
-      const response = await this.request<{ id: string }>(
-        `/users/${userId}/playlists`,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            name,
-            description,
-            public: false
-          })
-        }
-      );
-      return response.id;
-    } catch (error) {
-      console.error('Create playlist failed:', error);
-      throw error;
-    }
-  }
-
-  async addTracksToPlaylist(
-    playlistId: string,
-    trackUris: string[]
-  ): Promise<void> {
-    try {
-      await this.request(`/playlists/${playlistId}/tracks`, {
-        method: 'POST',
-        body: JSON.stringify({
-          uris: trackUris
-        })
+      analyticsService.trackError(error as Error, {
+        context: 'spotify_track_details',
+        trackId
       });
-    } catch (error) {
-      console.error('Add tracks to playlist failed:', error);
       throw error;
     }
-  }
-
-  setAccessToken(token: string, expiresIn: number): void {
-    this.accessToken = token;
-    this.tokenExpiry = Date.now() + expiresIn * 1000;
-  }
-
-  setRefreshToken(token: string): void {
-    this.refreshToken = token;
-  }
-
-  isAuthenticated(): boolean {
-    return !!this.accessToken && Date.now() < this.tokenExpiry;
   }
 }
-
-export const spotifyService = new SpotifyService();

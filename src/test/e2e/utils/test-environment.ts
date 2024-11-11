@@ -1,36 +1,32 @@
-import { initializeTestEnvironment as initFirebaseTest } from '@firebase/rules-unit-testing';
-import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
-import { connectAuthEmulator, getAuth } from 'firebase/auth';
+import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
 
 interface TestEnvironment {
   projectId: string;
-  firestore: any;
-  auth: any;
+  firestore: FirebaseFirestore;
+  auth: Auth;
   cleanup: () => Promise<void>;
 }
 
 export async function initializeTestEnvironment(): Promise<TestEnvironment> {
   const projectId = `test-${Date.now()}`;
   
-  // Initialize test environment with emulators
-  const testEnv = await initFirebaseTest({
+  // Initialize test environment
+  const testEnv = await initializeTestEnvironment({
     projectId,
-    firestore: {
-      host: 'localhost',
-      port: 8080
-    },
-    auth: {
-      host: 'localhost',
-      port: 9099
-    }
+    firestore: { host: 'localhost', port: 8080 },
+    auth: { host: 'localhost', port: 9099 }
   });
 
   // Connect to emulators
   const firestore = getFirestore();
   const auth = getAuth();
   
-  connectFirestoreEmulator(firestore, 'localhost', 8080);
-  connectAuthEmulator(auth, 'http://localhost:9099');
+  if (process.env.NODE_ENV === 'test') {
+    connectFirestoreEmulator(firestore, 'localhost', 8080);
+    connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+  }
 
   return {
     projectId,

@@ -1,3 +1,5 @@
+import { Timestamp } from 'firebase-admin/firestore';
+
 export interface SpotifyTrack {
   id: string;
   name: string;
@@ -100,12 +102,17 @@ export interface UserPreferences {
 
 export interface UserProfile {
   id: string;
-  email?: string;
+  email: string | null;
   emailVerified: boolean;
-  displayName?: string;
-  photoURL?: string;
-  preferences: UserPreferences;
-  role: 'user' | 'dj' | 'admin';
+  displayName: string | null;
+  role: 'dj' | 'attendee';
+  preferences: {
+    theme: 'light' | 'dark';
+    notifications: boolean;
+    language: string;
+    emailNotifications: boolean;
+    updatedAt: Date;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -123,4 +130,102 @@ export interface EventAnalytics {
     timestamp: Date;
     count: number;
   }>;
+}
+
+// Admin Operations Types
+export interface AdminOperations {
+  // User Management
+  createUser: (userData: Partial<UserProfile>) => Promise<string>;
+  updateUser: (userId: string, updates: Partial<UserProfile>) => Promise<void>;
+  deleteUser: (userId: string) => Promise<void>;
+  
+  // Event Management
+  createEvent: (eventData: Partial<Event>) => Promise<string>;
+  updateEvent: (eventId: string, updates: Partial<Event>) => Promise<void>;
+  deleteEvent: (eventId: string) => Promise<void>;
+  
+  // Request Management
+  approveRequest: (eventId: string, requestId: string) => Promise<void>;
+  rejectRequest: (eventId: string, requestId: string) => Promise<void>;
+  
+  // Attendee Management
+  manageAttendee: (eventId: string, userId: string, action: AttendeeAction) => Promise<void>;
+}
+
+// Rate Limiting Types
+export interface RateLimit {
+  userId: string;
+  resourceType: 'request' | 'search' | 'attendee';
+  count: number;
+  window: {
+    start: Timestamp;
+    end: Timestamp;
+  };
+  limit: number;
+}
+
+export interface RateLimitConfig {
+  request: {
+    limit: number;
+    windowSeconds: number;
+  };
+  search: {
+    limit: number;
+    windowSeconds: number;
+  };
+  attendee: {
+    limit: number;
+    windowSeconds: number;
+  };
+  subscription: {
+    limit: number;
+    windowSeconds: number;
+  };
+}
+
+// Attendee Management Types
+export interface AttendeeManagement {
+  status: 'active' | 'inactive' | 'banned';
+  joinedAt: Date;
+  lastActive: Date;
+  permissions: {
+    canRequest: boolean;
+    canVote: boolean;
+    canChat: boolean;
+  };
+  metadata: {
+    browser: string;
+    platform: string;
+    ip: string;
+  };
+}
+
+export type AttendeeAction = 
+  | { type: 'JOIN'; metadata: Pick<AttendeeManagement, 'metadata'> }
+  | { type: 'UPDATE_STATUS'; status: AttendeeManagement['status'] }
+  | { type: 'UPDATE_PERMISSIONS'; permissions: Partial<AttendeeManagement['permissions']> }
+  | { type: 'BAN' }
+  | { type: 'REMOVE' };
+
+// Error Types
+export interface AppError extends Error {
+  code: ErrorCode;
+  context?: Record<string, unknown>;
+  timestamp: Date;
+  handled: boolean;
+}
+
+export type ErrorCode = 
+  | 'RATE_LIMIT_EXCEEDED'
+  | 'INVALID_REQUEST'
+  | 'UNAUTHORIZED'
+  | 'NOT_FOUND'
+  | 'OPERATION_FAILED';
+
+export interface ErrorContext {
+  userId?: string;
+  eventId?: string;
+  requestId?: string;
+  action?: string;
+  metadata?: Record<string, unknown>;
 } 

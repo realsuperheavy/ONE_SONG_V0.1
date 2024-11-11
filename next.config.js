@@ -12,12 +12,11 @@ const nextConfig = {
         fs: false,
         net: false,
         tls: false,
-        child_process: false
+        crypto: require.resolve('crypto-browserify'),
+        stream: require.resolve('stream-browserify'),
+        util: require.resolve('util/'),
+        events: require.resolve('events/'),
       };
-
-      config.externals = [...(config.externals || []), {
-        '@firebase/webchannel-wrapper': 'self.FirebaseWebchannelWrapper',
-      }];
     }
 
     config.resolve.alias = {

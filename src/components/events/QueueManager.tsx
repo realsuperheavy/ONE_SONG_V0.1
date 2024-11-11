@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect, useState } from 'react';
 import { EventRequestService } from '@/lib/firebase/services/event-request';
 import type { SongRequest } from '@/types/models';

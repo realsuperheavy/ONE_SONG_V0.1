@@ -1,9 +1,15 @@
 import { adminDb } from '../admin';
 import type { Event, SongRequest } from '@/types/models';
 import { analyticsService } from './analytics';
+import { RateLimitService } from './rate-limit';
+import { AppError } from '@/lib/error/AppError';
 
 export class EventRequestService {
-  constructor(private readonly db = adminDb) {}
+  private rateLimiter: RateLimitService;
+
+  constructor(private readonly db = adminDb) {
+    this.rateLimiter = new RateLimitService();
+  }
 
   async linkRequestToEvent(
     eventId: string,
@@ -80,5 +86,26 @@ export class EventRequestService {
       id: doc.id,
       ...doc.data()
     } as SongRequest));
+  }
+
+  async createRequest(eventId: string, userId: string, requestData: Partial<SongRequest>): Promise<void> {
+    const canProceed = await this.rateLimiter.checkRateLimit(userId, 'request');
+    if (!canProceed) {
+      throw new AppError({
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'Too many requests. Please try again later.',
+        context: { userId, eventId }
+      });
+    }
+
+    try {
+      // Existing implementation
+    } catch (error) {
+      throw new AppError({
+        code: 'OPERATION_FAILED',
+        message: 'Failed to create request',
+        context: { eventId, userId, error: error.message }
+      });
+    }
   }
 } 

@@ -1,44 +1,64 @@
+'use client';
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogContent, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { EventAdminService } from '@/lib/firebase/admin/events';
 import { analyticsService } from '@/lib/firebase/services/analytics';
-import type { Event } from '@/types/models';
+import type { EventStatus } from '@/types/models';
 
 interface Props {
   eventId: string;
-  initialStatus: Event['status'];
-  onStatusChange?: (newStatus: Event['status']) => void;
 }
 
-export function EventStatusManager({ eventId, initialStatus, onStatusChange }: Props) {
-  const [status, setStatus] = useState<Event['status']>(initialStatus);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const eventAdminService = new EventAdminService();
+export function EventStatusManager({ eventId }: Props) {
+  const [status, setStatus] = useState<EventStatus>('active');
+  const [loading, setLoading] = useState(true);
 
-  const handleStatusChange = async (newStatus: Event['status']) => {
-    setIsUpdating(true);
+  useEffect(() => {
+    fetchEventStatus();
+  }, [eventId]);
+
+  const fetchEventStatus = async () => {
     try {
-      await eventAdminService.batchUpdateEventStatus([eventId], newStatus);
+      const response = await fetch(`/api/events/${eventId}/status`);
+      if (!response.ok) throw new Error('Failed to fetch event status');
+      const data = await response.json();
+      setStatus(data.status);
+    } catch (error) {
+      console.error('Error fetching event status:', error);
+      analyticsService.trackError(error as Error, {
+        context: 'event_status_fetch'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateEventStatus = async (newStatus: EventStatus) => {
+    try {
+      const response = await fetch(`/api/events/${eventId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) throw new Error('Failed to update event status');
       setStatus(newStatus);
-      onStatusChange?.(newStatus);
-      
-      analyticsService.trackEvent('event_status_changed', {
+      analyticsService.trackEvent('event_status_updated', {
         eventId,
         oldStatus: status,
         newStatus
       });
     } catch (error) {
-      console.error('Failed to update event status:', error);
-    } finally {
-      setIsUpdating(false);
-      setShowConfirmDialog(false);
+      console.error('Error updating event status:', error);
+      analyticsService.trackError(error as Error, {
+        context: 'event_status_update'
+      });
     }
   };
 
-  const getStatusColor = (status: Event['status']) => {
+  const getStatusColor = (status: EventStatus) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800';
       case 'ended': return 'bg-red-100 text-red-800';
@@ -63,20 +83,20 @@ export function EventStatusManager({ eventId, initialStatus, onStatusChange }: P
             <Button
               size="sm"
               variant="outline"
-              onClick={() => handleStatusChange('active')}
-              disabled={isUpdating}
+              onClick={() => updateEventStatus('active')}
+              disabled={loading}
             >
               Activate
             </Button>
           )}
           
           {status === 'active' && (
-            <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+            <AlertDialog open={false} onOpenChange={() => {}}>
               <AlertDialogTrigger asChild>
                 <Button
                   size="sm"
                   variant="destructive"
-                  disabled={isUpdating}
+                  disabled={loading}
                 >
                   End Event
                 </Button>
@@ -91,15 +111,15 @@ export function EventStatusManager({ eventId, initialStatus, onStatusChange }: P
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setShowConfirmDialog(false)}
+                      onClick={() => {}}
                     >
                       Cancel
                     </Button>
                     <Button
                       size="sm"
                       variant="destructive"
-                      onClick={() => handleStatusChange('ended')}
-                      disabled={isUpdating}
+                      onClick={() => updateEventStatus('ended')}
+                      disabled={loading}
                     >
                       End Event
                     </Button>
