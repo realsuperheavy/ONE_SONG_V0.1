@@ -4,7 +4,7 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   FacebookAuthProvider,
-  AppleAuthProvider,
+  OAuthProvider,
   createUserWithEmailAndPassword,
   signOut,
   User
@@ -39,7 +39,7 @@ export const useAuth = () => {
   };
 
   const signInWithApple = async () => {
-    const provider = new AppleAuthProvider();
+    const provider = new OAuthProvider('apple.com');
     return signInWithPopup(auth, provider);
   };
 

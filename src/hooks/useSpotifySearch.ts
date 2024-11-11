@@ -1,79 +1,46 @@
-import { useState, useCallback } from 'react';
-import { useAuthStore } from '@/store/auth';
-import { spotifyService } from '@/lib/spotify/services';
+import { useState, useEffect } from "react";
+import { spotifyService } from "@/lib/spotify/service";
+import type { SpotifyTrack } from "@/types/models";
 
-export interface SpotifyTrack {
-  id: string;
-  title: string;
-  artist: string;
-  albumArt?: string;
-  duration: number;
-  previewUrl?: string;
-  popularity: number;
-  explicit: boolean;
-}
-
-interface UseSpotifySearchOptions {
-  limit?: number;
-  debounceMs?: number;
-}
-
-export function useSpotifySearch(options: UseSpotifySearchOptions = {}) {
-  const { limit = 20, debounceMs = 300 } = options;
+export function useSpotifySearch(query: string) {
   const [results, setResults] = useState<SpotifyTrack[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const user = useAuthStore((state) => state.user);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-  let debounceTimeout: NodeJS.Timeout;
-
-  const search = useCallback(async (query: string) => {
-    if (!query.trim()) {
+  useEffect(() => {
+    if (!query || !spotifyService.accessToken) {
       setResults([]);
       return;
     }
 
-    // Clear previous timeout
-    if (debounceTimeout) {
-      clearTimeout(debounceTimeout);
-    }
+    let isCancelled = false;
 
-    // Set new timeout
-    debounceTimeout = setTimeout(async () => {
-      setLoading(true);
-      setError(null);
-
+    const searchTracks = async () => {
       try {
-        const searchResults = await spotifyService.searchTracks(query, {
-          limit,
-          market: 'US' // TODO: Make this configurable
-        });
-
-        // Transform Spotify track data to our format
-        const tracks: SpotifyTrack[] = searchResults.tracks.items.map(track => ({
-          id: track.id,
-          title: track.name,
-          artist: track.artists.map(a => a.name).join(', '),
-          albumArt: track.album.images[0]?.url,
-          duration: track.duration_ms,
-          previewUrl: track.preview_url || undefined,
-          popularity: track.popularity,
-          explicit: track.explicit
-        }));
-
-        setResults(tracks);
-      } catch (err: any) {
-        setError(err.message);
+        setIsLoading(true);
+        setError(null);
+        const tracks = await spotifyService.searchTracks(query);
+        
+        if (!isCancelled) {
+          setResults(tracks);
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          setError(err as Error);
+        }
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
-    }, debounceMs);
-  }, [limit, debounceMs]);
+    };
 
-  return {
-    results,
-    loading,
-    error,
-    search
-  };
+    searchTracks();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [query]);
+
+  return { results, isLoading, error };
 } 

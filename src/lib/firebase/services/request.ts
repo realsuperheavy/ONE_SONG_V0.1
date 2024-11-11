@@ -20,7 +20,7 @@ export const requestService = {
       ...request,
       status: 'pending',
       metadata: {
-        requestTime: new Date().toISOString(),
+        requestTime: Date.now(),
         votes: 0
       }
     };

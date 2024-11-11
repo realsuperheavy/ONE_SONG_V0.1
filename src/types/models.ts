@@ -1,21 +1,41 @@
+export interface SpotifyTrack {
+  id: string;
+  name: string;
+  artists: {
+    id: string;
+    name: string;
+  }[];
+  album: {
+    id: string;
+    name: string;
+    images: {
+      url: string;
+      height: number;
+      width: number;
+    }[];
+  };
+  duration_ms: number;
+  uri: string;
+}
+
 export interface SongRequest {
   id: string;
   eventId: string;
-  status: 'pending' | 'approved' | 'rejected' | 'played';
+  userId: string;
   song: {
     id: string;
     title: string;
     artist: string;
     albumArt?: string;
     previewUrl?: string;
+    duration: number;
   };
+  status: 'pending' | 'approved' | 'rejected' | 'played';
   metadata: {
-    message?: string;
-    tipAmount?: number;
-    requestTime: string;
+    requestTime: number;
     votes: number;
+    tipAmount?: number;
   };
-  userId: string;
 }
 
 export interface Event {
