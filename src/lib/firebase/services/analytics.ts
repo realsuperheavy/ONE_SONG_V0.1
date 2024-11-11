@@ -1,7 +1,5 @@
-import { getAnalytics, logEvent } from 'firebase/analytics';
-import app from '../init';
-
-const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+import { logEvent } from 'firebase/analytics';
+import { analytics } from '../config';
 
 export const analyticsService = {
   trackEvent: (eventName: string, params?: Record<string, any>) => {
@@ -15,6 +13,8 @@ export const analyticsService = {
       logEvent(analytics, 'error', {
         error_name: error.name,
         error_message: error.message,
+        stack: error.stack,
+        timestamp: Date.now(),
         ...context
       });
     }

@@ -1,5 +1,10 @@
-import { RecaptchaVerifier, signInWithPhoneNumber, PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
-import { auth } from './init';
+import { 
+  RecaptchaVerifier, 
+  signInWithPhoneNumber, 
+  PhoneAuthProvider, 
+  signInWithCredential 
+} from 'firebase/auth';
+import { auth } from './config';
 
 let verificationId: string | null = null;
 let recaptchaVerifier: RecaptchaVerifier | null = null;

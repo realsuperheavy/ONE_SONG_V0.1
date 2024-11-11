@@ -23,4 +23,4 @@ export function decrypt(encryptedText: string): string {
     console.error('Decryption failed:', error);
     throw new Error('Failed to decrypt data');
   }
-} 
+}

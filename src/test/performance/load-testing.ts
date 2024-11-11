@@ -1,78 +1,64 @@
+import { test, expect } from '@playwright/test';
+import { initializeTestEnvironment } from '../e2e/utils/test-environment';
+import { generateTestUser, generateTestEvent } from '../e2e/utils/test-data';
 import { performance } from 'perf_hooks';
-import { firebaseServices } from '@/lib/firebase/services';
-import { analyticsService } from '@/lib/firebase/services/analytics';
 
-interface LoadTestConfig {
-  users: number;
-  duration: number;
-  rampUp: number;
-  thinkTime: number;
-}
-
-interface LoadTestMetrics {
+interface PerformanceMetrics {
+  responseTimes: number[];
+  errors: Error[];
+  concurrentUsers: number;
   totalRequests: number;
-  successfulRequests: number;
-  failedRequests: number;
-  averageResponseTime: number;
-  p95ResponseTime: number;
-  errorRate: number;
+  successRate: number;
 }
 
-export class LoadTestRunner {
-  private metrics: {
-    responseTimes: number[];
-    errors: Error[];
-    startTime: number;
+class LoadTestRunner {
+  private metrics: PerformanceMetrics = {
+    responseTimes: [],
+    errors: [],
+    concurrentUsers: 0,
+    totalRequests: 0,
+    successRate: 0
   };
 
-  constructor(private config: LoadTestConfig) {
-    this.metrics = {
-      responseTimes: [],
-      errors: [],
-      startTime: 0
-    };
+  async runLoadTest(options: {
+    users: number;
+    duration: number;
+    rampUpTime: number;
+  }) {
+    const startTime = performance.now();
+    const userPromises: Promise<void>[] = [];
+
+    // Gradually ramp up users
+    const userInterval = options.rampUpTime / options.users;
+    
+    for (let i = 0; i < options.users; i++) {
+      await new Promise(resolve => setTimeout(resolve, userInterval));
+      this.metrics.concurrentUsers++;
+      userPromises.push(this.simulateUser(i));
+    }
+
+    await Promise.all(userPromises);
+    
+    this.calculateMetrics();
+    return this.metrics;
   }
 
-  async runTest(): Promise<LoadTestMetrics> {
-    this.metrics.startTime = performance.now();
-    const users = Array.from({ length: this.config.users }, (_, i) => i);
-    
+  private async simulateUser(userId: number) {
+    const testEnv = await initializeTestEnvironment();
+    const user = await generateTestUser('attendee');
+    const event = await generateTestEvent('dj-1');
+
     try {
-      // Start virtual users
-      const userPromises = users.map((userId) => 
-        this.simulateUser(userId)
-      );
-
-      await Promise.all(userPromises);
-
-      return this.calculateMetrics();
+      await this.executeUserActions(userId);
+      this.metrics.totalRequests++;
     } catch (error) {
-      analyticsService.trackError(error as Error, {
-        context: 'load_test',
-        users: this.config.users,
-        duration: this.config.duration
-      });
-      throw error;
+      this.metrics.errors.push(error as Error);
+    } finally {
+      await testEnv.cleanup();
     }
   }
 
-  private async simulateUser(userId: number): Promise<void> {
-    const startDelay = (userId / this.config.users) * this.config.rampUp;
-    await new Promise(resolve => setTimeout(resolve, startDelay));
-
-    const endTime = performance.now() + this.config.duration;
-    
-    while (performance.now() < endTime) {
-      try {
-        await this.executeUserActions(userId);
-        await new Promise(resolve => setTimeout(resolve, this.config.thinkTime));
-      } catch (error) {
-        this.metrics.errors.push(error as Error);
-      }
-    }
-  }
-
-  private async executeUserActions(userId: number): Promise<void> {
+  private async executeUserActions(userId: number) {
     const actions = [
       this.searchTracks,
       this.makeRequest,
@@ -91,54 +77,27 @@ export class LoadTestRunner {
     }
   }
 
-  private async searchTracks(userId: number): Promise<void> {
-    const searchTerms = ['rock', 'pop', 'dance', 'hip hop'];
-    const term = searchTerms[Math.floor(Math.random() * searchTerms.length)];
-    await firebaseServices.search.tracks(term);
+  private calculateMetrics() {
+    const totalRequests = this.metrics.totalRequests;
+    const successfulRequests = totalRequests - this.metrics.errors.length;
+    this.metrics.successRate = (successfulRequests / totalRequests) * 100;
   }
+}
 
-  private async makeRequest(userId: number): Promise<void> {
-    const request = {
-      userId: `user_${userId}`,
-      song: {
-        id: `song_${Math.random()}`,
-        title: 'Test Song',
-        artist: 'Test Artist'
-      }
-    };
-    await firebaseServices.requests.create(request);
-  }
+test('Performance under load', async () => {
+  const runner = new LoadTestRunner();
+  const metrics = await runner.runLoadTest({
+    users: 100,
+    duration: 60000, // 1 minute
+    rampUpTime: 30000 // 30 seconds
+  });
 
-  private async voteRequest(userId: number): Promise<void> {
-    const requests = await firebaseServices.requests.getAll();
-    if (requests.length > 0) {
-      const randomRequest = requests[Math.floor(Math.random() * requests.length)];
-      await firebaseServices.requests.vote(randomRequest.id, `user_${userId}`);
-    }
-  }
-
-  private async checkQueue(userId: number): Promise<void> {
-    await firebaseServices.queue.getQueue('test_event');
-  }
-
-  private calculateMetrics(): LoadTestMetrics {
-    const totalRequests = this.metrics.responseTimes.length;
-    const failedRequests = this.metrics.errors.length;
-    
-    const sortedTimes = [...this.metrics.responseTimes].sort((a, b) => a - b);
-    const p95Index = Math.floor(sortedTimes.length * 0.95);
-
-    return {
-      totalRequests,
-      successfulRequests: totalRequests - failedRequests,
-      failedRequests,
-      averageResponseTime: this.average(sortedTimes),
-      p95ResponseTime: sortedTimes[p95Index] || 0,
-      errorRate: failedRequests / totalRequests
-    };
-  }
-
-  private average(numbers: number[]): number {
-    return numbers.reduce((a, b) => a + b, 0) / numbers.length;
-  }
-} 
+  // Assert performance requirements
+  expect(metrics.successRate).toBeGreaterThan(95); // 95% success rate
+  
+  const avgResponseTime = metrics.responseTimes.reduce((a, b) => a + b, 0) / metrics.responseTimes.length;
+  expect(avgResponseTime).toBeLessThan(1000); // Under 1 second average
+  
+  const p95ResponseTime = metrics.responseTimes.sort((a, b) => a - b)[Math.floor(metrics.responseTimes.length * 0.95)];
+  expect(p95ResponseTime).toBeLessThan(2000); // 95th percentile under 2 seconds
+}); 

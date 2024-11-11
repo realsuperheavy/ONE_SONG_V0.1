@@ -88,4 +88,39 @@ export interface User {
     tipsGiven: number;
   };
   createdAt: string;
+}
+
+export interface UserPreferences {
+  theme: 'light' | 'dark';
+  notifications: boolean;
+  language: string;
+  emailNotifications: boolean;
+  updatedAt: Date;
+}
+
+export interface UserProfile {
+  id: string;
+  email?: string;
+  emailVerified: boolean;
+  displayName?: string;
+  photoURL?: string;
+  preferences: UserPreferences;
+  role: 'user' | 'dj' | 'admin';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface EventAnalytics {
+  totalRequests: number;
+  queueSize: number;
+  activeUsers: number;
+  averageWaitTime: number;
+  topGenres: Array<{
+    name: string;
+    count: number;
+  }>;
+  requestTrends: Array<{
+    timestamp: Date;
+    count: number;
+  }>;
 } 

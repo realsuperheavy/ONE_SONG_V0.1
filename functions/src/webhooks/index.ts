@@ -2,6 +2,11 @@ import * as functions from "firebase-functions";
 import { onCall } from "firebase-functions/v2/https";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import type { 
+  QueryDocumentSnapshot, 
+  DocumentData,
+  Timestamp 
+} from 'firebase-admin/firestore';
 import axios, { isAxiosError } from "axios";
 import * as crypto from "crypto";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -17,12 +22,21 @@ interface WebhookConfig {
   url: string;
   secret: string;
   timeout: number;
+  enabled: boolean;
+  events: string[];
 }
 
 interface WebhookRequest {
   url: string;
   payload: WebhookPayload;
   timeout?: number;
+}
+
+interface WebhookLogEntry {
+  webhookId: string;
+  success: boolean;
+  details: Record<string, unknown>;
+  timestamp: Timestamp;
 }
 
 const validateSignature = (
@@ -45,12 +59,14 @@ const logWebhookAttempt = async (
   success: boolean,
   details: Record<string, unknown>,
 ): Promise<void> => {
-  await admin.firestore().collection("webhookLogs").add({
+  const logEntry: WebhookLogEntry = {
     webhookId,
     success,
     details,
-    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-  });
+    timestamp: admin.firestore.Timestamp.now(),
+  };
+
+  await admin.firestore().collection("webhookLogs").add(logEntry);
 };
 
 export const sendWebhook = onCall(
@@ -71,13 +87,14 @@ export const sendWebhook = onCall(
       webhookConfigSnapshot = await admin.firestore()
         .collection("webhookConfigs")
         .where("url", "==", url)
+        .where("enabled", "==", true)
         .limit(1)
         .get();
 
       if (webhookConfigSnapshot.empty) {
         throw new functions.https.HttpsError(
           "not-found",
-          "Webhook configuration not found",
+          "Webhook configuration not found or disabled",
         );
       }
 
@@ -92,6 +109,14 @@ export const sendWebhook = onCall(
         throw new functions.https.HttpsError(
           "permission-denied",
           "Invalid webhook signature",
+        );
+      }
+
+      // Validate event type
+      if (!config.events.includes(payload.eventType)) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Event type not configured for this webhook",
         );
       }
 
@@ -122,13 +147,13 @@ export const sendWebhook = onCall(
       };
     } catch (error: unknown) {
       // Log failure
-      if (webhookConfigSnapshot) {
+      if (webhookConfigSnapshot?.docs[0]) {
         await logWebhookAttempt(
           webhookConfigSnapshot.docs[0].id,
           false,
           {
             error: error instanceof Error ? error.message : "Unknown error",
-            code: error instanceof Error && "code" in error ? error.code : undefined,
+            code: error instanceof Error && "code" in error ? (error as any).code : undefined,
             payload,
           },
         );
@@ -153,29 +178,106 @@ export const sendWebhook = onCall(
   },
 );
 
-// Cleanup old webhook logs
 export const cleanupWebhookLogs = onSchedule(
   {
     schedule: "0 0 * * *", // every day at midnight
     timeZone: "UTC",
+    retryCount: 3,
+    maxRetrySeconds: 60
   },
   async () => {
-    const thirtyDaysAgo = admin.firestore.Timestamp.fromDate(
-      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    try {
+      const thirtyDaysAgo = admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      );
+
+      const snapshot = await admin.firestore()
+        .collection("webhookLogs")
+        .where("timestamp", "<", thirtyDaysAgo)
+        .get();
+
+      if (snapshot.empty) {
+        functions.logger.info("No webhook logs to clean up");
+        return;
+      }
+
+      const batch = admin.firestore().batch();
+      let deletedCount = 0;
+
+      snapshot.docs.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
+        batch.delete(doc.ref);
+        deletedCount++;
+      });
+
+      await batch.commit();
+
+      // Track cleanup metrics with operation timestamp instead of execution ID
+      functions.logger.info("Webhook logs cleanup completed", {
+        deletedCount,
+        olderThan: thirtyDaysAgo.toDate().toISOString(),
+        timestamp: admin.firestore.Timestamp.now().toDate().toISOString()
+      });
+
+    } catch (error) {
+      functions.logger.error("Webhook logs cleanup failed", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: admin.firestore.Timestamp.now().toDate().toISOString()
+      });
+      throw error;
+    }
+  }
+);
+
+// Optional: Add metrics tracking
+export const getWebhookMetrics = onCall(async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "Must be authenticated to get webhook metrics",
+    );
+  }
+
+  try {
+    const last24Hours = admin.firestore.Timestamp.fromDate(
+      new Date(Date.now() - 24 * 60 * 60 * 1000),
     );
 
-    const snapshot = await admin.firestore()
+    const logsSnapshot = await admin.firestore()
       .collection("webhookLogs")
-      .where("timestamp", "<", thirtyDaysAgo)
+      .where("timestamp", ">=", last24Hours)
       .get();
 
-    const batch = admin.firestore().batch();
-    snapshot.docs.forEach((doc) => {
-      batch.delete(doc.ref);
+    const metrics = {
+      total: logsSnapshot.size,
+      successful: 0,
+      failed: 0,
+      averageResponseTime: 0,
+    };
+
+    let totalResponseTime = 0;
+    let responseTimes = 0;
+
+    logsSnapshot.docs.forEach((doc) => {
+      const log = doc.data() as WebhookLogEntry;
+      if (log.success) {
+        metrics.successful++;
+        if (log.details.responseTime) {
+          totalResponseTime += Number(log.details.responseTime);
+          responseTimes++;
+        }
+      } else {
+        metrics.failed++;
+      }
     });
 
-    await batch.commit();
+    metrics.averageResponseTime = responseTimes ? totalResponseTime / responseTimes : 0;
 
-    functions.logger.info(`Cleaned up ${snapshot.size} webhook logs`);
-  },
-);
+    return metrics;
+  } catch (error) {
+    functions.logger.error("Error getting webhook metrics", error);
+    throw new functions.https.HttpsError(
+      "internal",
+      "Failed to get webhook metrics",
+    );
+  }
+});

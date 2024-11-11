@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        ('admin' in request.auth.token && request.auth.token.admin == true);
+    }
+    
+    function isDJ() {
+      return isAuthenticated() && 
+        ('role' in request.auth.token && request.auth.token.role == 'dj');
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isEventDJ(eventData) {
+      return isAuthenticated() && request.auth.uid == eventData.djId;
+    }
+
+    function isRateLimited() {
+      return request.time > resource.data.lastRequest + duration.value(60, 's');
+    }
+
+    function validateRequestData() {
+      return request.resource.data.keys().hasAll(['song', 'metadata']) &&
+             request.resource.data.song.keys().hasAll(['id', 'title', 'artist']) &&
+             request.resource.data.metadata.keys().hasAll(['requestTime', 'votes']);
+    }
+
+    // User rules
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Event rules
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if isDJ() || isAdmin();
+      allow update: if isEventDJ(resource.data) || isAdmin();
+      allow delete: if isEventDJ(resource.data) || isAdmin();
+      
+      // Nested collections
+      match /requests/{requestId} {
+        allow read: if true;
+        allow create: if isAuthenticated() && 
+          exists(/databases/$(database)/documents/events/$(eventId)/attendees/$(request.auth.uid)) &&
+          validateRequestData() &&
+          isRateLimited();
+        allow update: if isEventDJ(get(/databases/$(database)/documents/events/$(eventId)).data);
+        allow delete: if isEventDJ(get(/databases/$(database)/documents/events/$(eventId)).data) || isAdmin();
+      }
+      
+      match /queue/{queueId} {
+        allow read: if true;
+        allow write: if isEventDJ(get(/databases/$(database)/documents/events/$(eventId)).data) || isAdmin();
+      }
+    }
+
+    // Webhook rules
+    match /webhooks/{webhookId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /events/{eventId}/attendees/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && (
+        request.auth.uid == userId || 
+        isEventDJ(get(/databases/$(database)/documents/events/$(eventId)).data)
+      );
+      allow delete: if isEventDJ(get(/databases/$(database)/documents/events/$(eventId)).data);
+    }
+
+    match /events/{eventId}/requests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+        exists(/databases/$(database)/documents/events/$(eventId)/attendees/$(request.auth.uid));
+      allow update: if isEventDJ(get(/databases/$(database)/documents/events/$(eventId)).data);
+    }
+  }
+} 
