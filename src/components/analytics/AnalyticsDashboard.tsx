@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useAnalyticsStore } from '@/store/analytics';
 import { RequestAnalytics } from './RequestAnalytics';
-import { Card } from '@/components/ui/card';
-import { Spinner } from '@/components/ui/spinner';
+import { Card } from '@/components/ui/Card';
+import { Spinner } from '@/components/ui/Spinner';
 
 interface AnalyticsDashboardProps {
   eventId: string;

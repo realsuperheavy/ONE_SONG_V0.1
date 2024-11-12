@@ -1,4 +1,4 @@
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import { DragDropContext, Droppable, Draggable, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd';
 import { QueueItem } from '@/lib/firebase/services/queue';
 import { XIcon, GripVerticalIcon } from 'lucide-react';
 
@@ -22,7 +22,7 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <Droppable droppableId="queue">
-        {(provided) => (
+        {(provided: DroppableProvided) => (
           <div
             {...provided.droppableProps}
             ref={provided.innerRef}
@@ -34,7 +34,7 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
                 draggableId={item.id}
                 index={index}
               >
-                {(provided) => (
+                {(provided: DraggableProvided) => (
                   <div
                     ref={provided.innerRef}
                     {...provided.draggableProps}

@@ -9,30 +9,60 @@ export class AdvancedPlaybackController extends PlaybackController {
   private nextAnalysis: AudioFeatures | null = null;
   private transitionTimer: NodeJS.Timeout | null = null;
 
-  async prepareNextTrack(queueItem: QueueItem): Promise<void> {
+  constructor(eventId: string) {
+    super(eventId);
+  }
+
+  getCurrentTime(): number {
+    // Implementation
+    return 0;
+  }
+
+  getDuration(): number {
+    // Implementation
+    return 0;
+  }
+
+  async play(): Promise<void> {
+    // Implementation
+  }
+
+  async pause(): Promise<void> {
+    // Implementation
+  }
+
+  seek(time: number): void {
+    // Implementation
+  }
+
+  setVolume(volume: number): void {
+    // Implementation
+  }
+
+  async prepareNextTrack(track: QueueItem): Promise<void> {
     try {
       // Get audio features for next track
-      this.nextAnalysis = await trackAnalysisService.getAudioFeatures(queueItem.song.id);
+      this.nextAnalysis = await trackAnalysisService.getAudioFeatures(track.song.id);
       
       // Preload audio
-      await this.preloadAudio(queueItem.song.previewUrl);
+      await this.preloadAudio(track.song.previewUrl);
       
       // Track preparation analytics
       analyticsService.trackEvent('track_prepared', {
-        trackId: queueItem.song.id,
-        eventId: queueItem.eventId,
-        queuePosition: queueItem.queuePosition
+        trackId: track.song.id,
+        eventId: track.eventId,
+        queuePosition: track.queuePosition
       });
     } catch (error) {
       analyticsService.trackError(error as Error, {
         context: 'track_preparation',
-        trackId: queueItem.song.id
+        trackId: track.song.id
       });
       throw error;
     }
   }
 
-  async transitionToNext(nextItem: QueueItem): Promise<void> {
+  async transitionToNext(track: QueueItem): Promise<void> {
     if (!this.nextAnalysis || !this.currentTrack) return;
 
     try {
@@ -44,11 +74,11 @@ export class AdvancedPlaybackController extends PlaybackController {
       // Track transition start
       analyticsService.trackEvent('transition_start', {
         fromTrackId: this.currentTrack.id,
-        toTrackId: nextItem.song.id,
+        toTrackId: track.song.id,
         transitionType
       });
 
-      await this.executeTransition(transitionType, nextItem);
+      await this.executeTransition(transitionType, track);
       
       // Update current track analysis
       this.currentAnalysis = this.nextAnalysis;
@@ -56,7 +86,7 @@ export class AdvancedPlaybackController extends PlaybackController {
 
       // Track transition complete
       analyticsService.trackEvent('transition_complete', {
-        trackId: nextItem.song.id,
+        trackId: track.song.id,
         transitionType,
         success: true
       });
@@ -64,11 +94,11 @@ export class AdvancedPlaybackController extends PlaybackController {
       analyticsService.trackError(error as Error, {
         context: 'track_transition',
         fromTrackId: this.currentTrack.id,
-        toTrackId: nextItem.song.id
+        toTrackId: track.song.id
       });
       
       // Fallback to immediate switch on error
-      await this.playTrack(nextItem.song);
+      await this.playTrack(track.song);
     }
   }
 

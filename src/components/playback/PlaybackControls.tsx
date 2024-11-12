@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
-import { Button } from '../ui/button';
-import { Slider } from '../ui/Slider';
+import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
 import { AdvancedPlaybackController } from '@/lib/playback/AdvancedPlaybackController';
 import { QueueManager } from '@/lib/queue/QueueManager';
 import { analyticsService } from '@/lib/firebase/services/analytics';
 import { useEventData } from '@/hooks/useEventData';
+import { PauseIcon, PlayIcon, SkipForwardIcon } from 'lucide-react';
+import { QueueItem } from '@/types/queue';
 
 interface PlaybackControlsProps {
   eventId: string;
@@ -31,7 +33,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
   useEffect(() => {
     // Initialize playback controller
-    playbackControllerRef.current = new AdvancedPlaybackController();
+    playbackControllerRef.current = new AdvancedPlaybackController(eventId);
 
     return () => {
       if (progressIntervalRef.current) {

@@ -1,48 +1,43 @@
 import { CacheConfig, CacheEntry } from './types';
 
 export class Cache<T> {
-  private store: Map<string, CacheEntry<T>>;
+  private cache: Map<string, { value: T; timestamp: number }>;
   private config: CacheConfig;
 
   constructor(config: CacheConfig) {
-    this.store = new Map();
-    this.config = {
-      maxSize: 1000,
-      ttl: 3600,
-      ...config
-    };
+    this.cache = new Map();
+    this.config = config;
   }
 
-  async get(key: string): Promise<T | null> {
-    const entry = this.store.get(key);
-    if (!entry) return null;
-
-    if (Date.now() > entry.expiresAt) {
-      this.store.delete(key);
-      return null;
+  set(key: string, value: T): void {
+    if (this.cache.size >= this.config.maxSize) {
+      this.evictOldest();
     }
-
-    return entry.value;
-  }
-
-  async set(key: string, value: T, ttl?: number): Promise<void> {
-    if (this.store.size >= (this.config.maxSize || 1000)) {
-      // Remove oldest entry if cache is full
-      const oldestKey = this.store.keys().next().value;
-      this.store.delete(oldestKey);
-    }
-
-    this.store.set(key, {
+    this.cache.set(key, {
       value,
-      expiresAt: Date.now() + ((ttl || this.config.ttl || 3600) * 1000)
+      timestamp: Date.now()
     });
   }
 
-  async delete(key: string): Promise<void> {
-    this.store.delete(key);
+  get(key: string): T | null {
+    const item = this.cache.get(key);
+    if (!item) return null;
+
+    if (Date.now() - item.timestamp > this.config.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    return item.value;
   }
 
-  async clear(): Promise<void> {
-    this.store.clear();
+  private evictOldest(): void {
+    const oldest = [...this.cache.entries()]
+      .sort(([, a], [, b]) => a.timestamp - b.timestamp)[0];
+    if (oldest) {
+      this.cache.delete(oldest[0]);
+    }
   }
-} 
+}
+
+export const createCache = <T>(config: CacheConfig) => new Cache<T>(config); 

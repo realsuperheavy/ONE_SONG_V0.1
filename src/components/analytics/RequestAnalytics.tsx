@@ -1,21 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useAnalyticsStore } from '@/store/analytics';
-import { LineChart } from '../charts/LineChart';
-import { BarChart } from '../charts/BarChart';
-import { PieChart } from '../charts/PieChart';
-import { DateRangePicker } from '../ui/date-range-picker';
-import { Card } from '../ui/card';
-import { DateRange } from 'react-day-picker';
-import { AnalyticsState } from '@/store/analytics';
-
-interface AnalyticsData {
-  totalRequests: number;
-  totalTips: number;
-  approvalRate: number;
-  requestsByHour: Record<string, number>;
-  averageResponseTime: number;
-  popularGenres: Record<string, number>;
-}
+import { BarChart, LineChart, PieChart } from '@/components/charts';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
+import { Card } from '@/components/ui/Card';
+import { Spinner } from '@/components/ui/Spinner';
 
 interface RequestAnalyticsProps {
   eventId: string;
@@ -23,7 +11,7 @@ interface RequestAnalyticsProps {
 }
 
 export function RequestAnalytics({ eventId, className = '' }: RequestAnalyticsProps) {
-  const { analytics, loading, error, timeRange, setTimeRange, fetchAnalytics } = useAnalyticsStore((state: AnalyticsState) => state);
+  const { analytics, loading, error, timeRange, setTimeRange, fetchAnalytics } = useAnalyticsStore();
   const [activeTab, setActiveTab] = useState<'overview' | 'trends' | 'genres'>('overview');
 
   useEffect(() => {
@@ -33,7 +21,7 @@ export function RequestAnalytics({ eventId, className = '' }: RequestAnalyticsPr
   if (loading) {
     return (
       <div className="flex justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" />
+        <Spinner />
       </div>
     );
   }
@@ -57,6 +45,7 @@ export function RequestAnalytics({ eventId, className = '' }: RequestAnalyticsPr
         <DateRangePicker
           value={timeRange}
           onChange={setTimeRange}
+          maxDate={new Date()}
         />
       </div>
 
@@ -118,10 +107,8 @@ export function RequestAnalytics({ eventId, className = '' }: RequestAnalyticsPr
               <BarChart
                 data={Object.entries(analytics.requestsByHour).map(([hour, count]) => ({
                   label: `${hour}:00`,
-                  value: count as number
+                  value: count
                 }))}
-                xAxis="label"
-                yAxis="value"
               />
             </div>
           </Card>
@@ -146,11 +133,8 @@ export function RequestAnalytics({ eventId, className = '' }: RequestAnalyticsPr
             <LineChart
               data={Object.entries(analytics.requestsByHour).map(([hour, count]) => ({
                 label: `${hour}:00`,
-                value: count as number
+                value: count
               }))}
-              xAxis="label"
-              yAxis="value"
-              color="indigo"
             />
           </div>
         </Card>
@@ -163,17 +147,8 @@ export function RequestAnalytics({ eventId, className = '' }: RequestAnalyticsPr
             <PieChart
               data={Object.entries(analytics.popularGenres).map(([genre, count]) => ({
                 label: genre,
-                value: count as number
+                value: count
               }))}
-              labelKey="label"
-              valueKey="value"
-              colors={[
-                { background: 'indigo', border: 'indigo' },
-                { background: 'blue', border: 'blue' },
-                { background: 'green', border: 'green' },
-                { background: 'yellow', border: 'yellow' },
-                { background: 'red', border: 'red' }
-              ]}
             />
           </div>
         </Card>

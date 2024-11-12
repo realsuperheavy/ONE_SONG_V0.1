@@ -1,4 +1,4 @@
-import { adminDb } from '../admin';
+import { adminDb, Timestamp } from '../admin';
 import { analyticsService } from './analytics';
 import type { RateLimit, RateLimitConfig } from '@/types/models';
 import { 
@@ -9,7 +9,6 @@ import {
   getFirestore 
 } from 'firebase-admin/firestore';
 import { AppError } from '@/lib/error/AppError';
-import * as admin from 'firebase-admin';
 
 export class RateLimitService {
   private readonly defaultConfig: RateLimitConfig = {
@@ -51,7 +50,7 @@ export class RateLimitService {
     try {
       return await this.db.runTransaction(async (transaction: Transaction) => {
         const doc = await transaction.get(rateLimitRef);
-        const now = admin.firestore.Timestamp.now();
+        const now = Timestamp.now();
         const config = this.config[resourceType];
 
         if (!doc.exists) {
@@ -61,7 +60,7 @@ export class RateLimitService {
             count: 1,
             window: {
               start: now,
-              end: admin.firestore.Timestamp.fromMillis(Date.now() + config.windowSeconds * 1000)
+              end: Timestamp.fromMillis(Date.now() + config.windowSeconds * 1000)
             },
             limit: config.limit
           };
@@ -72,13 +71,13 @@ export class RateLimitService {
         const rateLimit = doc.data() as RateLimit;
         const windowEnd = rateLimit.window.end;
 
-        if (now.seconds > windowEnd.seconds) {
+        if (now.toMillis() > windowEnd.toMillis()) {
           const newRateLimit: RateLimit = {
             ...rateLimit,
             count: 1,
             window: {
               start: now,
-              end: admin.firestore.Timestamp.fromMillis(Date.now() + config.windowSeconds * 1000)
+              end: Timestamp.fromMillis(Date.now() + config.windowSeconds * 1000)
             }
           };
           transaction.set(rateLimitRef, newRateLimit);
@@ -142,7 +141,7 @@ export class RateLimitService {
     }
 
     const rateLimit = doc.data() as RateLimit;
-    const now = admin.firestore.Timestamp.fromDate(new Date());
+    const now = Timestamp.fromDate(new Date());
     const windowEnd = rateLimit.window.end;
 
     if (now.toDate().getTime() > windowEnd.toDate().getTime()) {
@@ -175,7 +174,7 @@ export class RateLimitService {
 
     return this.db.runTransaction(async transaction => {
       const doc = await transaction.get(rateLimitRef);
-      const now = admin.firestore.Timestamp.now();
+      const now = Timestamp.now();
       
       if (!doc.exists) {
         transaction.set(rateLimitRef, {
@@ -184,7 +183,7 @@ export class RateLimitService {
           count: 1,
           window: {
             start: now,
-            end: admin.firestore.Timestamp.fromMillis(Date.now() + this.config.subscription.windowSeconds * 1000)
+            end: Timestamp.fromMillis(Date.now() + this.config.subscription.windowSeconds * 1000)
           },
           limit: this.config.subscription.limit
         });
@@ -198,7 +197,7 @@ export class RateLimitService {
           count: 1,
           window: {
             start: now,
-            end: admin.firestore.Timestamp.fromMillis(Date.now() + this.config.subscription.windowSeconds * 1000)
+            end: Timestamp.fromMillis(Date.now() + this.config.subscription.windowSeconds * 1000)
           }
         });
         return true;

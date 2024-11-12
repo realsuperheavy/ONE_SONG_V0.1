@@ -1,6 +1,8 @@
 import { ThemeProvider } from '@/providers/ThemeProvider';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import { useEffect } from 'react';
+import { registerServiceWorker } from '@/lib/serviceWorker/register';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -9,6 +11,10 @@ export default function RootLayout({
 }: {
   children: any;
 }) {
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>

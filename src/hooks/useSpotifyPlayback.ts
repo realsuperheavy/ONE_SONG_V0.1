@@ -1,99 +1,114 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Cache } from '@/lib/cache';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { SpotifyTrack } from './useSpotifySearch';
 
-interface PlaybackState {
-  isPlaying: boolean;
-  currentTrack: string | null;
-  progress: number;
+interface UseSpotifyPlaybackOptions {
+  onPlaybackStart?: () => void;
+  onPlaybackEnd?: () => void;
+  onPlaybackError?: (error: Error) => void;
 }
 
-export function useSpotifyPlayback() {
-  const [playbackState, setPlaybackState] = useState<PlaybackState>({
-    isPlaying: false,
-    currentTrack: null,
-    progress: 0
-  });
-  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
-  const cache = new Cache<ArrayBuffer>();
+export function useSpotifyPlayback(options: UseSpotifyPlaybackOptions = {}) {
+  const { onPlaybackStart, onPlaybackEnd, onPlaybackError } = options;
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTrack, setCurrentTrack] = useState<SpotifyTrack | null>(null);
+  const [progress, setProgress] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const progressInterval = useRef<NodeJS.Timer>();
 
-  const preloadTrack = useCallback(async (previewUrl: string) => {
-    if (!previewUrl) return;
+  const cleanup = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+    }
+    setProgress(0);
+    setIsPlaying(false);
+  }, []);
 
-    const cached = await cache.get(previewUrl);
-    if (cached) return;
+  useEffect(() => {
+    return () => cleanup();
+  }, [cleanup]);
+
+  const play = useCallback(async (track: SpotifyTrack) => {
+    if (!track.previewUrl) {
+      onPlaybackError?.(new Error('No preview URL available'));
+      return;
+    }
 
     try {
-      const response = await fetch(previewUrl);
-      const buffer = await response.arrayBuffer();
-      await cache.set(previewUrl, buffer);
+      cleanup();
+
+      audioRef.current = new Audio(track.previewUrl);
+      setCurrentTrack(track);
+
+      // Setup audio event listeners
+      audioRef.current.addEventListener('play', () => {
+        setIsPlaying(true);
+        onPlaybackStart?.();
+      });
+
+      audioRef.current.addEventListener('ended', () => {
+        cleanup();
+        onPlaybackEnd?.();
+      });
+
+      audioRef.current.addEventListener('error', (e) => {
+        cleanup();
+        onPlaybackError?.(new Error('Failed to play preview'));
+      });
+
+      // Start playback
+      await audioRef.current.play();
+
+      // Setup progress tracking
+      progressInterval.current = setInterval(() => {
+        if (audioRef.current) {
+          setProgress((audioRef.current.currentTime / audioRef.current.duration) * 100);
+        }
+      }, 100);
     } catch (error) {
-      console.error('Failed to preload track:', error);
+      cleanup();
+      onPlaybackError?.(error as Error);
+    }
+  }, [cleanup, onPlaybackStart, onPlaybackEnd, onPlaybackError]);
+
+  const pause = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
     }
   }, []);
 
-  const playPreview = useCallback(async (previewUrl: string | null) => {
-    if (!previewUrl) return;
-
-    if (audio) {
-      audio.pause();
-      audio.src = '';
+  const resume = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.play();
+      setIsPlaying(true);
     }
+  }, []);
 
-    const newAudio = new Audio(previewUrl);
-    newAudio.addEventListener('timeupdate', () => {
-      setPlaybackState(prev => ({
-        ...prev,
-        progress: (newAudio.currentTime / newAudio.duration) * 100
-      }));
-    });
+  const stop = useCallback(() => {
+    cleanup();
+  }, [cleanup]);
 
-    newAudio.addEventListener('ended', () => {
-      setPlaybackState({
-        isPlaying: false,
-        currentTrack: null,
-        progress: 0
-      });
-    });
-
-    try {
-      await newAudio.play();
-      setAudio(newAudio);
-      setPlaybackState({
-        isPlaying: true,
-        currentTrack: previewUrl,
-        progress: 0
-      });
-    } catch (error) {
-      console.error('Playback failed:', error);
+  const seek = useCallback((percentage: number) => {
+    if (audioRef.current) {
+      const time = (percentage / 100) * audioRef.current.duration;
+      audioRef.current.currentTime = time;
+      setProgress(percentage);
     }
-  }, [audio]);
-
-  const stopPreview = useCallback(() => {
-    if (audio) {
-      audio.pause();
-      audio.src = '';
-      setAudio(null);
-      setPlaybackState({
-        isPlaying: false,
-        currentTrack: null,
-        progress: 0
-      });
-    }
-  }, [audio]);
-
-  useEffect(() => {
-    return () => {
-      if (audio) {
-        audio.pause();
-        audio.src = '';
-      }
-    };
-  }, [audio]);
+  }, []);
 
   return {
-    playbackState,
-    playPreview,
-    stopPreview,
-    preloadTrack
+    isPlaying,
+    currentTrack,
+    progress,
+    play,
+    pause,
+    resume,
+    stop,
+    seek
   };
 } 

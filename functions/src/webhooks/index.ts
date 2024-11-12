@@ -2,11 +2,11 @@ import * as functions from "firebase-functions";
 import { onCall } from "firebase-functions/v2/https";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
-import type { 
-  QueryDocumentSnapshot, 
+import type {
+  QueryDocumentSnapshot,
   DocumentData,
-  Timestamp 
-} from 'firebase-admin/firestore';
+  Timestamp,
+} from "firebase-admin/firestore";
 import axios, { isAxiosError } from "axios";
 import * as crypto from "crypto";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -183,7 +183,7 @@ export const cleanupWebhookLogs = onSchedule(
     schedule: "0 0 * * *", // every day at midnight
     timeZone: "UTC",
     retryCount: 3,
-    maxRetrySeconds: 60
+    maxRetrySeconds: 60,
   },
   async () => {
     try {
@@ -215,13 +215,12 @@ export const cleanupWebhookLogs = onSchedule(
       functions.logger.info("Webhook logs cleanup completed", {
         deletedCount,
         olderThan: thirtyDaysAgo.toDate().toISOString(),
-        timestamp: admin.firestore.Timestamp.now().toDate().toISOString()
+        timestamp: admin.firestore.Timestamp.now().toDate().toISOString(),
       });
-
     } catch (error) {
       functions.logger.error("Webhook logs cleanup failed", {
         error: error instanceof Error ? error.message : "Unknown error",
-        timestamp: admin.firestore.Timestamp.now().toDate().toISOString()
+        timestamp: admin.firestore.Timestamp.now().toDate().toISOString(),
       });
       throw error;
     }

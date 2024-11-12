@@ -7,6 +7,7 @@ interface BarChartProps {
   data: ChartData[];
   xAxis: string;
   yAxis: string;
+  color: string;
   height?: number;
   className?: string;
 }
@@ -15,6 +16,7 @@ export const BarChart: React.FC<BarChartProps> = ({
   data,
   xAxis,
   yAxis,
+  color,
   height = 250,
   className
 }) => {

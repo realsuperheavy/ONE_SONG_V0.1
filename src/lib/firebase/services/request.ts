@@ -14,27 +14,24 @@ interface RequestUpdate {
 }
 
 export const requestService = {
-  createRequest: async (request: Omit<SongRequest, 'id' | 'status'>): Promise<string> => {
+  createRequest: async (request: Partial<SongRequest>) => {
     const requestRef = ref(rtdb, `requests/${request.eventId}`);
-    const newRequest: Omit<SongRequest, 'id'> = {
+    const newRequest = {
       ...request,
       status: 'pending',
       metadata: {
-        requestTime: Date.now(),
+        ...request.metadata,
+        requestTime: new Date().toISOString(),
         votes: 0
       }
     };
     
     const newRequestRef = await push(requestRef, newRequest);
-    return newRequestRef.key!;
+    return newRequestRef.key;
   },
 
-  updateRequest: async (
-    requestId: string, 
-    eventId: string, 
-    updates: RequestUpdate
-  ): Promise<void> => {
-    const requestRef = ref(rtdb, `requests/${eventId}/${requestId}`);
+  updateRequest: async (requestId: string, updates: Partial<SongRequest>) => {
+    const requestRef = ref(rtdb, `requests/${updates.eventId}/${requestId}`);
     await update(requestRef, updates);
   },
 

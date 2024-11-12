@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getStorage } from 'firebase-admin/storage';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 
 // Initialize only if no apps exist
 if (!getApps().length) {
@@ -19,6 +19,9 @@ if (!getApps().length) {
 export const adminDb = getFirestore();
 export const adminAuth = getAuth();
 export const adminStorage = getStorage();
+
+// Export Timestamp and FieldValue for use in services
+export { Timestamp, FieldValue };
 
 // Export admin for credential usage in other files
 export default admin;

@@ -3,7 +3,7 @@ import { useRequestStore } from '@/store/request';
 import { useAuthStore } from '@/store/auth';
 import { requestService } from '@/lib/firebase/services/request';
 import { RequestCard } from './RequestCard';
-import { Spinner } from '@/components/ui/spinner';
+import { Spinner } from '@/components/ui/Spinner';
 
 interface RequestListProps {
   eventId: string;

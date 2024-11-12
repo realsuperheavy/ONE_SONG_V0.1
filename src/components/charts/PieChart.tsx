@@ -8,10 +8,10 @@ interface ChartDataWithKeys extends ChartData {
 }
 
 interface PieChartProps {
-  data: ChartDataWithKeys[];
+  data: ChartData[];
   labelKey: string;
   valueKey: string;
-  colors: Array<{background: string; border: string}>;
+  colors: string[];
   height?: number;
   className?: string;
 }

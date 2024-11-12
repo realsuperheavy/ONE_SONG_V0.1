@@ -17,16 +17,24 @@ interface AnalyticsConfig {
   };
 }
 
+export interface RealTimeAnalyticsConfig {
+  updateInterval?: number;
+  metricsManager: CustomMetricsManager;
+  alertSystem: AlertSystem;
+  maxRetries?: number;
+  batchSize?: number;
+}
+
 export class RealTimeAnalytics {
   private readonly eventId: string;
   private readonly alertSystem: AlertSystem;
   private readonly metricsManager: CustomMetricsManager;
   private listeners: Map<string, () => void> = new Map();
 
-  constructor(config: AnalyticsConfig) {
+  constructor(config: RealTimeAnalyticsConfig) {
     this.eventId = config.eventId;
-    this.alertSystem = new AlertSystem();
-    this.metricsManager = new CustomMetricsManager(config.eventId);
+    this.alertSystem = config.alertSystem;
+    this.metricsManager = config.metricsManager;
 
     this.initializeAlertRules(config.alertThresholds);
     this.initializeMetrics(config.metricConfigs);
