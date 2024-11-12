@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { auth } from '@/lib/firebase/config';
 import { spotifyAuthService } from '@/lib/spotify/services/auth';
 
 export default function SpotifyCallback() {
@@ -10,6 +11,14 @@ export default function SpotifyCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
+      // Verify Firebase auth state first
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        console.error('No authenticated user found');
+        router.push('/auth/login');
+        return;
+      }
+
       const code = searchParams.get('code');
       const error = searchParams.get('error');
 
@@ -19,22 +28,20 @@ export default function SpotifyCallback() {
         return;
       }
 
-      if (!code) {
-        console.error('No code received from Spotify');
-        router.push('/auth/error?source=spotify');
-        return;
-      }
-
       try {
-        const { accessToken, refreshToken, expiresIn } = await spotifyAuthService.handleCallback(code);
-
-        // Store tokens
-        localStorage.setItem('spotify_access_token', accessToken);
-        localStorage.setItem('spotify_refresh_token', refreshToken);
-        localStorage.setItem('spotify_expires_at', (Date.now() + expiresIn * 1000).toString());
-
-        // Redirect back to the app
-        router.push('/dashboard');
+        // Link Spotify account with Firebase user
+        await spotifyAuthService.linkAccount(currentUser.uid, code!);
+        
+        // Check auth type and redirect accordingly
+        const authType = localStorage.getItem('auth_type');
+        if (authType === 'attendee') {
+          router.push('/attendee/events');
+        } else {
+          router.push('/dashboard');
+        }
+        
+        // Clean up
+        localStorage.removeItem('auth_type');
       } catch (error) {
         console.error('Failed to handle Spotify callback:', error);
         router.push('/auth/error?source=spotify');

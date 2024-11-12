@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { PlaybackController } from './PlaybackController';
 import { useQueue } from '@/hooks/useQueue';
+import { SpotifyTrack } from '@/types/spotify';
 
 interface PlaybackContextType {
   isPlaying: boolean;
@@ -36,6 +37,22 @@ export function PlaybackProvider({
   useEffect(() => {
     controller.updateQueue(queue);
   }, [queue]);
+
+  useEffect(() => {
+    if (!state.isPlaying) return;
+    
+    const cleanup = controller.startPlayback();
+    return () => cleanup();
+  }, [state.isPlaying, controller]);
+
+  useEffect(() => {
+    const handleStateChange = (state: PlaybackState) => {
+      setState(state);
+    };
+    
+    controller.subscribe(handleStateChange);
+    return () => controller.unsubscribe(handleStateChange);
+  }, [controller]);
 
   const value: PlaybackContextType = {
     ...state,

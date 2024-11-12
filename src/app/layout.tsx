@@ -1,3 +1,5 @@
+'use client';
+
 import { ThemeProvider } from '@/providers/ThemeProvider';
 import { Inter } from 'next/font/google';
 import './globals.css';

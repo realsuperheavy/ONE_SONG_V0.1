@@ -1,5 +1,4 @@
-import { useState, useCallback } from 'react';
-import { useAuthStore } from '@/store/auth';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { spotifyService } from '@/lib/spotify/services';
 
 export interface SpotifyTrack {
@@ -13,67 +12,42 @@ export interface SpotifyTrack {
   explicit: boolean;
 }
 
-interface UseSpotifySearchOptions {
-  limit?: number;
-  debounceMs?: number;
-}
-
-export function useSpotifySearch(options: UseSpotifySearchOptions = {}) {
-  const { limit = 20, debounceMs = 300 } = options;
+export function useSpotifySearch() {
+  const timeoutRef = useRef<NodeJS.Timeout>();
   const [results, setResults] = useState<SpotifyTrack[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const user = useAuthStore((state) => state.user);
-
-  let debounceTimeout: NodeJS.Timeout;
 
   const search = useCallback(async (query: string) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
     if (!query.trim()) {
       setResults([]);
       return;
     }
 
-    // Clear previous timeout
-    if (debounceTimeout) {
-      clearTimeout(debounceTimeout);
-    }
-
-    // Set new timeout
-    debounceTimeout = setTimeout(async () => {
-      setLoading(true);
-      setError(null);
-
+    setLoading(true);
+    timeoutRef.current = setTimeout(async () => {
       try {
-        const searchResults = await spotifyService.searchTracks(query, {
-          limit,
-          market: 'US' // TODO: Make this configurable
-        });
-
-        // Transform Spotify track data to our format
-        const tracks: SpotifyTrack[] = searchResults.tracks.items.map(track => ({
-          id: track.id,
-          title: track.name,
-          artist: track.artists.map(a => a.name).join(', '),
-          albumArt: track.album.images[0]?.url,
-          duration: track.duration_ms,
-          previewUrl: track.preview_url || undefined,
-          popularity: track.popularity,
-          explicit: track.explicit
-        }));
-
+        const tracks = await spotifyService.searchTracks(query);
         setResults(tracks);
-      } catch (err: any) {
-        setError(err.message);
+      } catch (error) {
+        console.error('Search failed:', error);
+        setResults([]);
       } finally {
         setLoading(false);
       }
-    }, debounceMs);
-  }, [limit, debounceMs]);
+    }, 300);
+  }, []);
 
-  return {
-    results,
-    loading,
-    error,
-    search
-  };
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  return { search, results, loading };
 } 

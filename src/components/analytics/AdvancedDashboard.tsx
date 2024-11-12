@@ -45,6 +45,20 @@ export const AdvancedDashboard: React.FC<AdvancedDashboardProps> = ({ eventId })
   });
 
   useEffect(() => {
+    const loadMetrics = async () => {
+      try {
+        const data = await metricsManager.getMetrics();
+        setMetrics(data);
+      } catch (error) {
+        alertSystem.error('Failed to load metrics');
+        analytics.trackError(error as Error);
+      }
+    };
+    
+    loadMetrics();
+  }, [metricsManager, alertSystem, analytics]);
+
+  useEffect(() => {
     analytics.trackEventMetrics(eventId);
 
     const unsubscribeMetrics = metricsManager.onMetricsUpdate((newMetrics: MetricsData) => {

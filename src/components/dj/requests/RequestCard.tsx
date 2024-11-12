@@ -73,7 +73,7 @@ export function RequestCard({ request, onApprove, onReject, showActions = true }
 
       {request.metadata.message && (
         <p className="mt-2 text-sm text-gray-400 italic">
-          "{request.metadata.message}"
+          &quot;{request.metadata.message}&quot;
         </p>
       )}
     </Card>

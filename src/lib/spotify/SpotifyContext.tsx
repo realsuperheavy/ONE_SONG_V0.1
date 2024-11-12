@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { spotifyAuthService } from './services/auth';
 
@@ -24,7 +24,29 @@ export function SpotifyProvider({ children }: SpotifyProviderProps) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const user = useAuthStore((state) => state.user);
 
-  // Initialize Spotify state from localStorage
+  const refreshAccessToken = useCallback(async (refreshToken: string) => {
+    try {
+      const newAccessToken = await spotifyAuthService.refreshAccessToken(refreshToken);
+      setAccessToken(newAccessToken);
+      setIsAuthenticated(true);
+      
+      localStorage.setItem('spotify_access_token', newAccessToken);
+      localStorage.setItem('spotify_expires_at', (Date.now() + 3600 * 1000).toString());
+    } catch (error) {
+      setError('Failed to refresh Spotify access token');
+      disconnect();
+    }
+  }, []);
+
+  const disconnect = useCallback(() => {
+    setIsAuthenticated(false);
+    setAccessToken(null);
+    setError(null);
+    localStorage.removeItem('spotify_access_token');
+    localStorage.removeItem('spotify_refresh_token');
+    localStorage.removeItem('spotify_expires_at');
+  }, []);
+
   useEffect(() => {
     const token = localStorage.getItem('spotify_access_token');
     const refreshToken = localStorage.getItem('spotify_refresh_token');
@@ -36,40 +58,15 @@ export function SpotifyProvider({ children }: SpotifyProviderProps) {
         setAccessToken(token);
         setIsAuthenticated(true);
       } else {
-        // Token expired, try to refresh
         refreshAccessToken(refreshToken);
       }
     }
     setIsInitializing(false);
-  }, []);
-
-  const refreshAccessToken = async (refreshToken: string) => {
-    try {
-      const newAccessToken = await spotifyAuthService.refreshAccessToken(refreshToken);
-      setAccessToken(newAccessToken);
-      setIsAuthenticated(true);
-      
-      // Update localStorage
-      localStorage.setItem('spotify_access_token', newAccessToken);
-      localStorage.setItem('spotify_expires_at', (Date.now() + 3600 * 1000).toString());
-    } catch (error) {
-      setError('Failed to refresh Spotify access token');
-      disconnect();
-    }
-  };
+  }, [refreshAccessToken]);
 
   const connect = (userType: 'dj' | 'attendee') => {
     const authUrl = spotifyAuthService.generateAuthUrl(userType);
     window.location.href = authUrl;
-  };
-
-  const disconnect = () => {
-    setIsAuthenticated(false);
-    setAccessToken(null);
-    setError(null);
-    localStorage.removeItem('spotify_access_token');
-    localStorage.removeItem('spotify_refresh_token');
-    localStorage.removeItem('spotify_expires_at');
   };
 
   return (

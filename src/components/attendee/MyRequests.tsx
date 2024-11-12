@@ -31,7 +31,7 @@ export function MyRequests({ eventId, userId }: MyRequestsProps) {
       <h2 className="text-lg font-semibold mb-4">My Requests</h2>
       {requests.length === 0 ? (
         <p className="text-muted-foreground text-center py-8">
-          You haven't made any requests yet
+          You haven&apos;t made any requests yet
         </p>
       ) : (
         <div className="space-y-4">
