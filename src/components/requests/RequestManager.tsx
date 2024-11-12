@@ -20,7 +20,7 @@ export function RequestManager({ eventId }: RequestManagerProps) {
       const update: Partial<SongRequest> = {
         status: 'approved' as const
       };
-      await requestService.updateRequest(requestId, eventId, update);
+      await requestService.updateRequest(requestId, update);
     } catch (error) {
       console.error('Failed to approve request:', error);
     } finally {
@@ -34,7 +34,7 @@ export function RequestManager({ eventId }: RequestManagerProps) {
       const update: Partial<SongRequest> = {
         status: 'rejected' as const
       };
-      await requestService.updateRequest(requestId, eventId, update);
+      await requestService.updateRequest(requestId, update);
     } catch (error) {
       console.error('Failed to reject request:', error);
     } finally {

@@ -21,6 +21,15 @@ interface MetricDataPoint {
   metadata?: Record<string, any>;
 }
 
+interface MetricResult {
+  avg?: number;
+  sum?: number;
+}
+
+interface MetricsResponse {
+  [key: string]: MetricResult;
+}
+
 export class CustomMetricsManager {
   private metricsCache: Cache<MetricDataPoint[]>;
   private configs: Map<string, MetricConfig> = new Map();
@@ -184,5 +193,13 @@ export class CustomMetricsManager {
         value
       });
     }
+  }
+
+  async getMetrics(metrics: string[], timeRange: { start: number; end: number }): Promise<MetricsResponse> {
+    // Implementation to fetch and aggregate metrics
+    return metrics.reduce((acc, metric) => ({
+      ...acc,
+      [metric]: { avg: 0, sum: 0 } // Default values, replace with actual implementation
+    }), {} as MetricsResponse);
   }
 } 

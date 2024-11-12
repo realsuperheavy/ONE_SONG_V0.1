@@ -30,7 +30,7 @@ export class PerformanceMonitor {
   constructor(eventId: string, thresholds?: Partial<PerformanceThresholds>) {
     this.eventId = eventId;
     this.alertSystem = new AlertSystem();
-    this.metricsManager = new CustomMetricsManager(eventId);
+    this.metricsManager = new CustomMetricsManager();
     this.metricsCache = new Cache<PerformanceMetrics>({ maxSize: 1000 });
     
     this.thresholds = {
@@ -120,7 +120,7 @@ export class PerformanceMonitor {
       requestCount: 0
     };
 
-    const cachedMetrics = await this.metricsCache.getLatest();
+    const cachedMetrics = await this.metricsCache.get('latest');
     return cachedMetrics || defaultMetrics;
   }
 
@@ -129,8 +129,8 @@ export class PerformanceMonitor {
    */
   private async checkThresholds(metrics: PerformanceMetrics): Promise<void> {
     await Promise.all([
-      this.alertSystem.checkRule('high_response_time'),
-      this.alertSystem.checkRule('high_error_rate')
+      this.alertSystem.checkRules('high_response_time'),
+      this.alertSystem.checkRules('high_error_rate')
     ]);
 
     // Record threshold violations in metrics

@@ -1,17 +1,32 @@
 import { BarChart } from '@/components/ui/charts/BarChart';
 import { Card } from '@/components/ui/card';
-import { DateRange } from '@/components/ui/date-range-picker';
-import { useEventActivity } from '@/hooks/useEventActivity';
+import { DateRangePicker, type DateRange } from '@/components/ui/date-range-picker';
+import { Spinner } from '@/components/ui/spinner';
+import { useEventActivity } from '../../../hooks/useEventActivity';
 
 interface ActivityTimelineChartProps {
   eventId: string;
   dateRange?: DateRange;
 }
 
+interface ActivityItem {
+  timestamp: string;
+  value: number;
+  type: string;
+}
+
+interface EventActivity {
+  events: ActivityItem[];
+  peakValue: number;
+  average: number;
+  totalActions: number;
+  uniqueUsers: number;
+}
+
 export function ActivityTimelineChart({ eventId, dateRange }: ActivityTimelineChartProps) {
   const { activity, isLoading } = useEventActivity(eventId, dateRange);
 
-  const chartData = activity?.map(item => ({
+  const chartData = activity?.events?.map((item: ActivityItem) => ({
     x: new Date(item.timestamp).toLocaleTimeString(),
     y: item.value,
     type: item.type
@@ -32,7 +47,7 @@ export function ActivityTimelineChart({ eventId, dateRange }: ActivityTimelineCh
             xLabel="Time"
             yLabel="Activity"
             color="#F49620"
-            tooltipFormat={(value, type) => `${value} ${type}`}
+            onTooltip={(value: number, type: string) => `${value} ${type}`}
             barWidth={0.8}
             grouped
           />

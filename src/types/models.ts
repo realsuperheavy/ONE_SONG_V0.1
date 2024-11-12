@@ -37,6 +37,7 @@ export interface SongRequest {
     requestTime: number;
     votes: number;
     tipAmount?: number;
+    message?: string;
   };
 }
 

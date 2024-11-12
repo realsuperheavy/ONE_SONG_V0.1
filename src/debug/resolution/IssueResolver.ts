@@ -1,23 +1,73 @@
 import { RealTimeDebugger } from '../workflows/RealTimeDebugger';
 import { SuccessTracker } from '../metrics/SuccessTracker';
-import { FirebaseDebugger } from '../firebase';
+import { FirebaseDebugger } from '@/lib/firebase/services/firebase-debugger';
 import { analyticsService } from '@/lib/firebase/services/analytics';
+import { DiagnosisReport } from '../types';
+
+interface Issue {
+  type: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+}
+
+interface ResolutionStep {
+  action: string;
+  success: boolean;
+  timestamp: number;
+  result?: any;
+  error?: Error;
+}
+
+interface Resolution {
+  strategy: string;
+  steps: ResolutionStep[];
+  timestamp: number;
+  diagnosis: DiagnosisReport;
+}
+
+interface VerificationCheck {
+  step: string;
+  passed: boolean;
+  timestamp: number;
+  details: any;
+}
+
+interface VerificationResult {
+  passed: boolean;
+  checks: VerificationCheck[];
+  systemHealth: DiagnosisReport;
+  timestamp: number;
+}
+
+interface ResolutionResult {
+  success: boolean;
+  resolution?: Resolution;
+  verification?: VerificationResult;
+  attempts: number;
+  timestamp: number;
+  escalated?: boolean;
+}
+
+interface ResolutionStrategy {
+  name: string;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  actions: string[];
+}
 
 export class IssueResolver {
-  private debugger: RealTimeDebugger;
-  private metrics: SuccessTracker;
-  private firebaseDebugger: FirebaseDebugger;
-  private resolutionAttempts: Map<string, number>;
+  private readonly debugInstance: RealTimeDebugger;
+  private readonly metricsInstance: SuccessTracker;
+  private readonly firebaseDebuggerInstance: FirebaseDebugger;
+  private readonly resolutionAttempts: Map<string, number>;
   private readonly MAX_ATTEMPTS = 3;
 
   constructor(
-    debugger: RealTimeDebugger,
-    metrics: SuccessTracker,
-    firebaseDebugger: FirebaseDebugger
+    debugInstance: RealTimeDebugger,
+    metricsInstance: SuccessTracker,
+    firebaseDebuggerInstance: FirebaseDebugger
   ) {
-    this.debugger = debugger;
-    this.metrics = metrics;
-    this.firebaseDebugger = firebaseDebugger;
+    this.debugInstance = debugInstance;
+    this.metricsInstance = metricsInstance;
+    this.firebaseDebuggerInstance = firebaseDebuggerInstance;
     this.resolutionAttempts = new Map();
   }
 
@@ -32,10 +82,12 @@ export class IssueResolver {
     try {
       // Start resolution tracking
       const startTime = Date.now();
-      this.metrics.trackMetric('resolution_attempt', attempts + 1);
+      this.metricsInstance.trackMetric('resolution_attempt', attempts + 1);
 
-      // Get diagnosis
-      const diagnosis = await this.debugger.diagnoseRealTimeIssue();
+      // Get diagnosis with conversion
+      const diagnosis = this.convertToDiagnosisReport(
+        await this.debugInstance.diagnoseRealTimeIssue()
+      );
       
       // Apply resolution strategy
       const resolution = await this.applyResolutionStrategy(diagnosis);
@@ -48,18 +100,18 @@ export class IssueResolver {
 
       // Track success
       const duration = Date.now() - startTime;
-      this.metrics.trackMetric('resolution_duration', duration);
+      this.metricsInstance.trackMetric('resolution_duration', duration);
 
       return {
         success: true,
         resolution,
         verification,
-        duration,
-        attempts: attempts + 1
+        attempts: attempts + 1,
+        timestamp: Date.now()
       };
     } catch (error) {
       // Track failure
-      this.metrics.trackMetric('resolution_failure', 1);
+      this.metricsInstance.trackMetric('resolution_failure', 1);
       this.resolutionAttempts.set(issueId, attempts + 1);
 
       // Log error
@@ -109,19 +161,18 @@ export class IssueResolver {
     const checks: VerificationCheck[] = [];
     let allPassed = true;
 
-    // Verify each aspect of the resolution
     for (const step of resolution.steps) {
       const check = await this.verifyStep(step);
       checks.push(check);
       if (!check.passed) allPassed = false;
     }
 
-    // Perform system-wide verification
-    const systemCheck = await this.debugger.diagnoseRealTimeIssue();
-    const systemHealthy = this.isSystemHealthy(systemCheck);
+    const systemCheck = this.convertToDiagnosisReport(
+      await this.debugInstance.diagnoseRealTimeIssue()
+    );
 
     return {
-      passed: allPassed && systemHealthy,
+      passed: allPassed && this.isSystemHealthy(systemCheck),
       checks,
       systemHealth: systemCheck,
       timestamp: Date.now()
@@ -134,7 +185,8 @@ export class IssueResolver {
     const startTime = Date.now();
 
     while (Date.now() - startTime < monitoringPeriod) {
-      const health = await this.debugger.diagnoseRealTimeIssue();
+      const rawHealth = await this.debugInstance.diagnoseRealTimeIssue();
+      const health = this.convertToDiagnosisReport(rawHealth);
       
       if (!this.isSystemHealthy(health)) {
         throw new Error('System instability detected during monitoring');
@@ -147,9 +199,9 @@ export class IssueResolver {
   private determineStrategy(diagnosis: DiagnosisReport): ResolutionStrategy {
     if (!diagnosis.connectivity.isConnected) {
       return {
-        name: 'reconnect',
-        priority: 'high',
-        actions: ['forceReconnect', 'validateConnection', 'syncData']
+        name: 'restore_connectivity',
+        priority: 'critical',
+        actions: ['forceReconnect', 'validateConnection']
       };
     }
 
@@ -179,38 +231,62 @@ export class IssueResolver {
   private async executeAction(action: string): Promise<any> {
     switch (action) {
       case 'forceReconnect':
-        return this.firebaseDebugger.forceReconnect();
+        return this.firebaseDebuggerInstance.forceReconnect();
       case 'validateConnection':
-        return this.firebaseDebugger.validateConnection();
+        return this.firebaseDebuggerInstance.validateConnection();
       case 'syncData':
-        return this.firebaseDebugger.forceSyncData();
+        return this.firebaseDebuggerInstance.forceReconnect();
       case 'resolveConflicts':
-        return this.firebaseDebugger.resolveDataConflicts();
+        return this.firebaseDebuggerInstance.resolveDataConflicts();
       case 'validateData':
-        return this.firebaseDebugger.validateDataIntegrity();
+        return this.firebaseDebuggerInstance.validateDataIntegrity();
       case 'clearCache':
-        return this.firebaseDebugger.clearCache();
+        return this.firebaseDebuggerInstance.clearCache();
       case 'optimizeIndexes':
-        return this.firebaseDebugger.optimizeIndexes();
+        return this.firebaseDebuggerInstance.optimizeIndexes();
       case 'validatePerformance':
-        return this.debugger.checkPerformance();
+        return this.debugInstance.checkPerformance();
       case 'cleanupResources':
-        return this.firebaseDebugger.cleanupResources();
+        return this.firebaseDebuggerInstance.cleanupResources();
       case 'validateSystem':
-        return this.debugger.diagnoseRealTimeIssue();
+        return this.debugInstance.diagnoseRealTimeIssue();
       default:
         throw new Error(`Unknown action: ${action}`);
     }
   }
 
   private async verifyStep(step: ResolutionStep): Promise<VerificationCheck> {
-    const check = await this.executeAction(`validate${step.action}`);
-    return {
-      step: step.action,
-      passed: check.success,
-      timestamp: Date.now(),
-      details: check
+    try {
+      // Map action to its corresponding validation action
+      const validationAction = this.getValidationAction(step.action);
+      const check = await this.executeAction(validationAction);
+      
+      return {
+        step: step.action,
+        passed: check.success || false,
+        timestamp: Date.now(),
+        details: check
+      };
+    } catch (error) {
+      return {
+        step: step.action,
+        passed: false,
+        timestamp: Date.now(),
+        details: { error: error instanceof Error ? error.message : 'Unknown error' }
+      };
+    }
+  }
+
+  private getValidationAction(action: string): string {
+    const validationMap: Record<string, string> = {
+      'forceReconnect': 'validateConnection',
+      'resolveConflicts': 'validateData',
+      'clearCache': 'validatePerformance',
+      'optimizeIndexes': 'validatePerformance',
+      'cleanupResources': 'validateSystem'
     };
+    
+    return validationMap[action] || `validate${action.charAt(0).toUpperCase()}${action.slice(1)}`;
   }
 
   private isSystemHealthy(diagnosis: DiagnosisReport): boolean {
@@ -240,5 +316,23 @@ export class IssueResolver {
       attempts: this.MAX_ATTEMPTS,
       timestamp: Date.now()
     };
+  }
+
+  // Update convertToDiagnosisReport to properly handle all required fields
+  private convertToDiagnosisReport(report: any): DiagnosisReport {
+    return {
+      ...report,
+      recommendations: report.recommendations || [],
+      severity: report.severity || 'low',
+      timestamp: report.timestamp || Date.now(),
+      connectivity: report.connectivity || { isConnected: false },
+      sync: report.sync || { conflicts: [] },
+      performance: report.performance || { 
+        responseTime: { trend: 'stable' } 
+      },
+      operations: report.operations || { failureRate: 0 },
+      healthStatus: report.healthStatus || 'healthy',
+      issues: report.issues || []
+    } as DiagnosisReport;
   }
 } 

@@ -6,8 +6,8 @@ export interface AlertRule {
   name: string;
   description: string;
   condition: () => Promise<boolean>;
-  severity: 'info' | 'warning' | 'error' | 'critical';
-  throttleMs?: number;  // Minimum time between alerts
+  severity: 'info' | 'warning' | 'error';
+  throttleMs?: number;
 }
 
 interface Alert {
@@ -31,7 +31,7 @@ export class AlertSystem {
   /**
    * Add a new alert rule
    */
-  addRule(rule: AlertRule): void {
+  registerRule(rule: AlertRule): void {
     this.rules.set(rule.id, rule);
   }
 
@@ -45,49 +45,29 @@ export class AlertSystem {
   /**
    * Check all rules and generate alerts if conditions are met
    */
-  async checkRules(): Promise<Alert[]> {
-    const alerts: Alert[] = [];
-    const now = Date.now();
+  async checkRules(ruleId: string): Promise<void> {
+    const rule = this.rules.get(ruleId);
+    if (!rule) return;
+    
+    if (await rule.condition()) {
+      const alert = {
+        id: `${rule.id}_${Date.now()}`,
+        ruleId: rule.id,
+        message: rule.description,
+        severity: rule.severity,
+        timestamp: Date.now()
+      };
 
-    for (const rule of this.rules.values()) {
-      try {
-        // Check throttling
-        const lastAlertTime = this.lastAlertTime.get(rule.id) || 0;
-        if (rule.throttleMs && now - lastAlertTime < rule.throttleMs) {
-          continue;
-        }
+      await this.alertCache.set(alert.id, alert);
+      this.lastAlertTime.set(rule.id, Date.now());
 
-        // Check condition
-        const isTriggered = await rule.condition();
-        if (isTriggered) {
-          const alert = {
-            id: `${rule.id}_${now}`,
-            ruleId: rule.id,
-            message: rule.description,
-            severity: rule.severity,
-            timestamp: now
-          };
-
-          alerts.push(alert);
-          await this.alertCache.set(alert.id, alert);
-          this.lastAlertTime.set(rule.id, now);
-
-          // Track alert in analytics
-          analyticsService.trackEvent('alert_triggered', {
-            ruleId: rule.id,
-            severity: rule.severity,
-            timestamp: now
-          });
-        }
-      } catch (error) {
-        analyticsService.trackError(error as Error, {
-          context: 'alert_system',
-          ruleId: rule.id
-        });
-      }
+      // Track alert in analytics
+      analyticsService.trackEvent('alert_triggered', {
+        ruleId: rule.id,
+        severity: rule.severity,
+        timestamp: Date.now()
+      });
     }
-
-    return alerts;
   }
 
   /**

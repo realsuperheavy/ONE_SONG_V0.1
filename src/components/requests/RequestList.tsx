@@ -3,7 +3,8 @@ import { useRequestStore } from '@/store/request';
 import { useAuthStore } from '@/store/auth';
 import { requestService } from '@/lib/firebase/services/request';
 import { RequestCard } from './RequestCard';
-import { Spinner } from '@/components/ui/Spinner';
+import { Spinner } from '@/components/ui/spinner';
+import type { SongRequest } from '@/types/models';
 
 interface RequestListProps {
   eventId: string;
@@ -12,7 +13,7 @@ interface RequestListProps {
 
 export function RequestList({ eventId, className = '' }: RequestListProps) {
   const { requests, loading, error, setRequests } = useRequestStore();
-  const user = useAuthStore((state) => state.user);
+  const user = useAuthStore((state: { user: any }) => state.user);
 
   useEffect(() => {
     const unsubscribe = requestService.subscribeToRequests(eventId, (updatedRequests) => {
@@ -48,7 +49,7 @@ export function RequestList({ eventId, className = '' }: RequestListProps) {
 
   return (
     <div className={`space-y-4 ${className}`}>
-      {requests.map((request) => (
+      {requests.map((request: SongRequest) => (
         <RequestCard
           key={request.id}
           request={request}

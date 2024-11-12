@@ -57,3 +57,5 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
     </div>
   )
 }
+
+export type { DateRange } from "react-day-picker"

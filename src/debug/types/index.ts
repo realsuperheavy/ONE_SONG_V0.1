@@ -1,12 +1,17 @@
 // Base diagnostic types
 export interface DiagnosisReport {
-  connectivity: ConnectivityStatus;
-  sync: SyncStatus;
-  operations: OperationsStatus;
-  performance: PerformanceStatus;
-  recommendations?: string[];
-  severity?: 'low' | 'medium' | 'high' | 'critical';
-  timestamp?: number;
+  timestamp: number;
+  healthStatus: 'healthy' | 'degraded' | 'critical';
+  connectivity: { isConnected: boolean };
+  sync: { conflicts: string[] };
+  operations: { failureRate: number };
+  performance: { 
+    responseTime: { 
+      trend: 'stable' | 'degrading' | 'improving'
+    } 
+  };
+  recommendations: string[];
+  severity: 'low' | 'medium' | 'high' | 'critical';
 }
 
 export interface ConnectivityStatus {
@@ -20,21 +25,11 @@ export interface SyncStatus {
   isSynced: boolean;
   lastSync: number;
   operations: SyncOperation[];
-  conflicts: SyncConflict[];
+  conflicts: string[];
 }
 
-export interface SyncOperation {
-  type: 'database' | 'cache' | 'storage';
-  status: boolean;
-  timestamp: number;
-  duration: number;
-}
-
-export interface SyncConflict {
-  key: string;
-  dbValue: any;
-  cacheValue: any;
-  timestamp: number;
+export interface SyncOperation extends Operation {
+  status: 'success' | 'failure';
 }
 
 export interface OperationsStatus {
@@ -47,12 +42,9 @@ export interface OperationsStatus {
 }
 
 export interface Operation {
-  id: string;
   type: 'read' | 'write' | 'update' | 'delete';
-  success: boolean;
   timestamp: number;
   duration: number;
-  error?: Error;
 }
 
 export interface PerformanceStatus {
@@ -64,9 +56,8 @@ export interface PerformanceStatus {
 export interface MetricTrend {
   current: number;
   average: number;
-  p95?: number;
   trend: 'improving' | 'stable' | 'degrading';
-  history?: number[];
+  history: number[];
 }
 
 // Success tracking types

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card } from "@/components/ui/card";
 import { Search, Music } from "lucide-react";
-import type { SpotifyTrack } from "@/types";
+import type { SpotifyTrack } from "@/types/models";
 
 interface SongSearchProps {
   eventId: string;
@@ -20,14 +20,31 @@ export function SongSearch({ eventId, userId }: SongSearchProps) {
   
   const { 
     results, 
-    isLoading, 
-    error 
-  } = useSpotifySearch(debouncedQuery);
+    loading,
+    error,
+    search 
+  } = useSpotifySearch({
+    limit: 20,
+    debounceMs: 300
+  });
   
   const { 
     requestSong, 
     isRequesting 
   } = useRequestSong(eventId, userId);
+
+  const convertToSpotifyTrack = (result: typeof results[0]): SpotifyTrack => ({
+    id: result.id,
+    name: result.title,
+    artists: [{ id: '0', name: result.artist }],
+    album: {
+      id: '0',
+      name: '',
+      images: result.albumArt ? [{ url: result.albumArt, height: 300, width: 300 }] : []
+    },
+    duration_ms: result.duration,
+    uri: `spotify:track:${result.id}`
+  });
 
   return (
     <Card className="p-4">
@@ -42,14 +59,14 @@ export function SongSearch({ eventId, userId }: SongSearchProps) {
           />
         </div>
 
-        {isLoading && (
+        {loading && (
           <div className="py-4">
             <Progress value={undefined} />
           </div>
         )}
 
         {error && (
-          <p className="text-destructive text-sm">{error.message}</p>
+          <p className="text-destructive text-sm">{error}</p>
         )}
 
         <div className="space-y-2">
@@ -61,14 +78,14 @@ export function SongSearch({ eventId, userId }: SongSearchProps) {
               <div className="flex items-center gap-3">
                 <Music className="text-muted-foreground" />
                 <div>
-                  <p className="font-medium">{track.name}</p>
+                  <p className="font-medium">{track.title}</p>
                   <p className="text-sm text-muted-foreground">
-                    {track.artists.map(a => a.name).join(", ")}
+                    {track.artist}
                   </p>
                 </div>
               </div>
               <Button
-                onClick={() => requestSong(track)}
+                onClick={() => requestSong(convertToSpotifyTrack(track))}
                 disabled={isRequesting}
               >
                 Request

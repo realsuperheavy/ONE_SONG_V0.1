@@ -1,5 +1,4 @@
 import { spotifyApi } from './api';
-import { SpotifyTrack } from '@/hooks/useSpotifySearch';
 
 interface SearchOptions {
   limit?: number;
@@ -75,4 +74,29 @@ export const spotifyTrackService = {
       explicit: track.explicit
     }));
   }
-}; 
+};
+
+export type SpotifyApiTrack = {
+  id: string;
+  name: string;
+  artists: { id: string; name: string; }[];
+  album: {
+    id: string;
+    name: string;
+    images: { url: string; }[];
+  };
+  duration_ms: number;
+  uri: string;
+  preview_url?: string;
+}
+
+export type SpotifyTrack = {
+  id: string;
+  title: string;
+  artist: string;
+  albumArt?: string;
+  duration: number;
+  previewUrl?: string;
+  popularity: number;
+  explicit: boolean;
+} 

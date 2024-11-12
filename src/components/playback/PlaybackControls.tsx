@@ -6,12 +6,64 @@ import { QueueManager } from '@/lib/queue/QueueManager';
 import { analyticsService } from '@/lib/firebase/services/analytics';
 import { useEventData } from '@/hooks/useEventData';
 import { PauseIcon, PlayIcon, SkipForwardIcon } from 'lucide-react';
-import { QueueItem } from '@/types/queue';
+import { QueueItem as FirebaseQueueItem } from '@/lib/firebase/services/queue';
 
 interface PlaybackControlsProps {
   eventId: string;
   onError?: (error: Error) => void;
 }
+
+// Rename the local interface to avoid conflict
+interface LocalQueueItem {
+  id: string;
+  songId: string;
+  requestId: string;
+  position: number;
+  userId: string;
+  queuePosition: number;
+  addedAt: string;
+  eventId: string;
+  status: "pending" | "approved" | "rejected" | "played";
+  metadata: {
+    requestTime: number;
+    votes: number;
+  };
+  song: {
+    id: string;
+    title: string;
+    artist: string;
+    albumArt?: string;
+    previewUrl?: string;
+    duration: number;
+  };
+}
+
+// Add conversion function
+const convertToLocalQueueItem = (item: FirebaseQueueItem): LocalQueueItem => {
+  return {
+    id: item.id,
+    songId: item.song.id,
+    requestId: item.id, // Using item.id as requestId
+    position: item.queuePosition,
+    userId: item.userId,
+    queuePosition: item.queuePosition,
+    addedAt: item.addedAt,
+    eventId: item.eventId,
+    status: item.status,
+    metadata: {
+      requestTime: item.metadata.requestTime,
+      votes: item.metadata.votes
+    },
+    song: {
+      id: item.song.id,
+      title: item.song.title,
+      artist: item.song.artist,
+      albumArt: item.song.albumArt,
+      previewUrl: item.song.previewUrl,
+      duration: item.song.duration
+    }
+  };
+};
 
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   eventId,
@@ -21,8 +73,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [volume, setVolume] = useState(1);
-  const [currentTrack, setCurrentTrack] = useState<QueueItem | null>(null);
-  const [nextTrack, setNextTrack] = useState<QueueItem | null>(null);
+  const [currentTrack, setCurrentTrack] = useState<LocalQueueItem | null>(null);
+  const [nextTrack, setNextTrack] = useState<LocalQueueItem | null>(null);
 
   // Refs
   const playbackControllerRef = useRef<AdvancedPlaybackController | null>(null);
@@ -51,11 +103,11 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     const nextIndex = currentIndex + 1;
     
     if (currentIndex === -1 && !currentTrack) {
-      setCurrentTrack(queue[0]);
+      setCurrentTrack(convertToLocalQueueItem(queue[0]));
     }
     
     if (nextIndex < queue.length) {
-      setNextTrack(queue[nextIndex]);
+      setNextTrack(convertToLocalQueueItem(queue[nextIndex]));
     } else {
       setNextTrack(null);
     }
@@ -135,12 +187,13 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     }
   };
 
-  const handleVolumeChange = (value: number) => {
-    setVolume(value);
-    playbackControllerRef.current?.setVolume(value);
+  // Fix handleVolumeChange type
+  const handleVolumeChange = (value: number[]): void => {
+    setVolume(value[0]);
+    playbackControllerRef.current?.setVolume(value[0]);
     
     analyticsService.trackEvent('volume_changed', {
-      value,
+      value: value[0],
       trackId: currentTrack?.song.id,
       eventId
     });
@@ -210,7 +263,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         <div className="w-32">
           <Slider
             value={volume * 100}
-            onChange={(value) => handleVolumeChange(value / 100)}
+            onChange={(value: number[]) => handleVolumeChange(value)}
             min={0}
             max={100}
             step={1}

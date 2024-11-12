@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useAnalyticsStore } from '@/store/analytics';
-import { BarChart, LineChart, PieChart } from '@/components/charts';
-import { DateRangePicker } from '@/components/ui/DateRangePicker';
-import { Card } from '@/components/ui/Card';
-import { Spinner } from '@/components/ui/Spinner';
+import { BarChart, LineChart, PieChart } from '@/components/ui/charts';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { Card } from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
 
 interface RequestAnalyticsProps {
   eventId: string;
   className?: string;
+}
+
+// Add the DateRangePickerProps type if not already defined
+interface DateRangePickerProps {
+  value: [Date | undefined, Date | undefined];
+  onChange: (range: [Date | undefined, Date | undefined]) => void;
+  disabled?: boolean;
+  // Remove maxDate if it's not supported by the component
 }
 
 export function RequestAnalytics({ eventId, className = '' }: RequestAnalyticsProps) {
@@ -45,7 +53,8 @@ export function RequestAnalytics({ eventId, className = '' }: RequestAnalyticsPr
         <DateRangePicker
           value={timeRange}
           onChange={setTimeRange}
-          maxDate={new Date()}
+          // Remove maxDate prop if not supported
+          // maxDate={new Date()}
         />
       </div>
 

@@ -3,6 +3,8 @@ import type { Event, SongRequest } from '@/types/models';
 import { analyticsService } from './analytics';
 import { RateLimitService } from './rate-limit';
 import { AppError } from '@/lib/error/AppError';
+import { onSnapshot, doc, updateDoc, arrayRemove } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 
 export class EventRequestService {
   private rateLimiter: RateLimitService;
@@ -100,12 +102,38 @@ export class EventRequestService {
 
     try {
       // Existing implementation
-    } catch (error) {
+    } catch (error: unknown) {
       throw new AppError({
         code: 'OPERATION_FAILED',
         message: 'Failed to create request',
-        context: { eventId, userId, error: error.message }
+        context: { 
+          eventId, 
+          userId, 
+          error: error instanceof Error ? error.message : String(error)
+        }
       });
     }
+  }
+
+  subscribeToQueue(eventId: string, callback: (queue: SongRequest[]) => void) {
+    const eventRef = doc(getFirestore(), 'events', eventId);
+    return onSnapshot(eventRef, (doc) => {
+      const data = doc.data();
+      callback(data?.queue || []);
+    });
+  }
+
+  async updateQueueOrder(eventId: string, songIds: string[]) {
+    const eventRef = doc(getFirestore(), 'events', eventId);
+    await updateDoc(eventRef, {
+      queue: songIds
+    });
+  }
+
+  async removeFromQueue(eventId: string, songId: string) {
+    const eventRef = doc(getFirestore(), 'events', eventId);
+    await updateDoc(eventRef, {
+      queue: arrayRemove(songId)
+    });
   }
 } 

@@ -2,50 +2,139 @@ import { PlaybackController } from './PlaybackController';
 import { trackAnalysisService } from '@/lib/spotify/services/analysis';
 import { analyticsService } from '@/lib/firebase/services/analytics';
 import { QueueItem } from '@/lib/firebase/services/queue';
+import { SpotifyTrack } from '@/lib/spotify/services/track';
+
+interface AudioFeatures {
+  bpm: number;
+  energy: number;
+  keyCompatibility?: number;
+}
+
+interface AudioPlayers {
+  current: HTMLAudioElement | null;
+  next: HTMLAudioElement | null;
+}
 
 export class AdvancedPlaybackController extends PlaybackController {
-  private crossfadeDuration: number = 3000; // 3 seconds
+  private crossfadeDuration: number = 3000;
   private currentAnalysis: AudioFeatures | null = null;
   private nextAnalysis: AudioFeatures | null = null;
   private transitionTimer: NodeJS.Timeout | null = null;
+  private players: AudioPlayers = {
+    current: null,
+    next: null
+  };
+  protected currentTrack: SpotifyTrack | null = null;
+  protected nextTrack: SpotifyTrack | null = null;
 
   constructor(eventId: string) {
     super(eventId);
+    this.initialize();
   }
 
   getCurrentTime(): number {
-    // Implementation
-    return 0;
+    return this.players.current?.currentTime || 0;
   }
 
   getDuration(): number {
-    // Implementation
-    return 0;
+    return this.players.current?.duration || 0;
   }
 
   async play(): Promise<void> {
-    // Implementation
+    if (this.players.current) {
+      await this.players.current.play();
+    }
   }
 
   async pause(): Promise<void> {
-    // Implementation
+    if (this.players.current) {
+      await this.players.current.pause();
+    }
   }
 
   seek(time: number): void {
-    // Implementation
+    if (this.players.current) {
+      this.players.current.currentTime = Math.max(0, Math.min(time, this.players.current.duration));
+    }
   }
 
-  setVolume(volume: number): void {
-    // Implementation
+  setVolume(volume: number, target: 'current' | 'next' = 'current'): void {
+    const player = this.players[target];
+    if (player) {
+      player.volume = Math.max(0, Math.min(1, volume));
+    }
+  }
+
+  protected async preloadAudio(url: string | undefined): Promise<void> {
+    if (!url) return;
+    
+    this.players.next = new Audio(url);
+    await new Promise((resolve, reject) => {
+      if (!this.players.next) return reject(new Error('No audio player'));
+      
+      this.players.next.addEventListener('canplaythrough', resolve, { once: true });
+      this.players.next.addEventListener('error', reject, { once: true });
+      this.players.next.load();
+    });
+  }
+
+  public async playTrack(track: SpotifyTrack, initialVolume: number = 1): Promise<void> {
+    if (!track.previewUrl) return;
+
+    const newPlayer = new Audio(track.previewUrl);
+    newPlayer.volume = initialVolume;
+
+    try {
+      await newPlayer.play();
+      
+      // Update players
+      if (this.players.current) {
+        this.players.current.pause();
+        this.players.current = null;
+      }
+      this.players.current = newPlayer;
+      this.players.next = null;
+      
+      // Update track info
+      this.currentTrack = track;
+    } catch (error) {
+      analyticsService.trackError(error as Error, {
+        context: 'playback_start',
+        trackId: track.id
+      });
+      throw error;
+    }
+  }
+
+  protected stopCurrent(): void {
+    if (this.players.current) {
+      this.players.current.pause();
+      this.players.current.currentTime = 0;
+      this.players.current = null;
+    }
+  }
+
+  private convertToSpotifyTrack(song: QueueItem['song']): SpotifyTrack {
+    return {
+      id: song.id,
+      title: song.title,
+      artist: song.artist,
+      albumArt: song.albumArt,
+      duration: song.duration,
+      previewUrl: song.previewUrl,
+      popularity: 0,
+      explicit: false
+    };
   }
 
   async prepareNextTrack(track: QueueItem): Promise<void> {
     try {
       // Get audio features for next track
       this.nextAnalysis = await trackAnalysisService.getAudioFeatures(track.song.id);
+      this.nextTrack = this.convertToSpotifyTrack(track.song);
       
       // Preload audio
-      await this.preloadAudio(track.song.previewUrl);
+      await this.preloadAudio(this.nextTrack.previewUrl);
       
       // Track preparation analytics
       analyticsService.trackEvent('track_prepared', {
@@ -98,7 +187,7 @@ export class AdvancedPlaybackController extends PlaybackController {
       });
       
       // Fallback to immediate switch on error
-      await this.playTrack(track.song);
+      await this.playTrack(this.convertToSpotifyTrack(track.song));
     }
   }
 
@@ -141,7 +230,8 @@ export class AdvancedPlaybackController extends PlaybackController {
   }
 
   private async executeCutTransition(nextItem: QueueItem): Promise<void> {
-    await this.playTrack(nextItem.song);
+    const track = this.convertToSpotifyTrack(nextItem.song);
+    await this.playTrack(track);
   }
 
   private async executeFadeTransition(nextItem: QueueItem): Promise<void> {
@@ -150,7 +240,8 @@ export class AdvancedPlaybackController extends PlaybackController {
     const volumeStep = 1 / steps;
 
     // Start playing next track at 0 volume
-    await this.playTrack(nextItem.song, 0);
+    const track = this.convertToSpotifyTrack(nextItem.song);
+    await this.playTrack(track, 0);
 
     for (let i = 0; i <= steps; i++) {
       const currentVolume = 1 - (i * volumeStep);
@@ -177,6 +268,14 @@ export class AdvancedPlaybackController extends PlaybackController {
     if (this.transitionTimer) {
       clearTimeout(this.transitionTimer);
     }
+    if (this.players.current) {
+      this.players.current.pause();
+      this.players.current = null;
+    }
+    if (this.players.next) {
+      this.players.next.pause();
+      this.players.next = null;
+    }
     super.cleanup();
   }
-} 
+}

@@ -1,42 +1,25 @@
 import { CacheConfig, CacheEntry } from './types';
 
 export class Cache<T> {
-  private cache: Map<string, { value: T; timestamp: number }>;
-  private config: CacheConfig;
+  private cache: Map<string, T>;
+  private maxSize: number;
 
-  constructor(config: CacheConfig) {
+  constructor(options: { maxSize?: number }) {
+    this.maxSize = options.maxSize ?? 100;
     this.cache = new Map();
-    this.config = config;
   }
 
-  set(key: string, value: T): void {
-    if (this.cache.size >= this.config.maxSize) {
-      this.evictOldest();
+  async set(key: string, value: T): Promise<void> {
+    this.cache.set(key, value);
+    if (this.cache.size > this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
     }
-    this.cache.set(key, {
-      value,
-      timestamp: Date.now()
-    });
   }
 
-  get(key: string): T | null {
-    const item = this.cache.get(key);
-    if (!item) return null;
-
-    if (Date.now() - item.timestamp > this.config.ttl) {
-      this.cache.delete(key);
-      return null;
-    }
-
-    return item.value;
-  }
-
-  private evictOldest(): void {
-    const oldest = [...this.cache.entries()]
-      .sort(([, a], [, b]) => a.timestamp - b.timestamp)[0];
-    if (oldest) {
-      this.cache.delete(oldest[0]);
-    }
+  async getLatest(): Promise<T | null> {
+    const entries = Array.from(this.cache.entries());
+    return entries.length > 0 ? entries[entries.length - 1][1] : null;
   }
 }
 
