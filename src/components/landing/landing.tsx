@@ -13,6 +13,7 @@ import { PerformanceMetricsCollector } from '@/lib/monitoring/PerformanceMetrics
 import { StatusIndicator } from '@/components/ui/status/StatusSystem';
 import { useAccessibility } from '@/providers/accessibility/AccessibilityProvider';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { ReactNode } from 'react';
 
 export function Landing() {
   const [showNearbyEvents, setShowNearbyEvents] = useState(false);
@@ -39,35 +40,28 @@ export function Landing() {
     try {
       const event = await eventService.getEventByCode(code);
       
-      // Announce for screen readers
-      announceMessage(`Joining event ${event.name}`);
+      if (!event) {
+        showToast({
+          title: 'Event not found',
+          description: 'Please check the event code and try again',
+          variant: 'destructive'
+        });
+        announceMessage('Event not found. Please check the code and try again.');
+        return;
+      }
 
-      analyticsService.trackEvent('event_join_attempt', {
-        method: 'code',
-        eventId: event.id,
-        success: true,
-        duration: performanceMonitor.getMetrics().responseTime
-      });
-
-      router.push(`/events/${event.id}/queue`);
+      analyticsService.trackEvent('join_event_attempt', { eventCode: code });
+      router.push(`/event/${event.id}`);
+      
     } catch (error) {
+      console.error('Error joining event:', error);
       showToast({
-        title: "Error",
-        description: "Invalid event code. Please try again.",
-        variant: "destructive"
+        title: 'Error',
+        description: 'Unable to join event. Please try again.',
+        variant: 'destructive'
       });
-
-      // Announce error for screen readers
-      announceMessage('Error joining event. Invalid code.');
-
-      analyticsService.trackEvent('event_join_attempt', {
-        method: 'code',
-        code,
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-
-      performanceMonitor.trackError('joinEvent');
+      announceMessage('Error joining event. Please try again.');
+      performanceMonitor.recordError('joinEvent', error as Error);
     } finally {
       setLoading(false);
       performanceMonitor.endOperation('joinEvent');
@@ -102,7 +96,6 @@ export function Landing() {
             
             <JoinEventForm 
               onSubmit={handleJoinEvent}
-              disabled={loading}
             />
 
             {loading && (
@@ -132,17 +125,19 @@ export function Landing() {
           </Card>
 
           {/* Nearby Events Section */}
-          <AnimatePresence>
-            {showNearbyEvents && (
+          <AnimatePresence mode="wait">
+            {showNearbyEvents ? (
               <motion.div
+                key="nearby-events"
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.2 }}
+                className="overflow-hidden"
               >
                 <NearbyEvents />
               </motion.div>
-            )}
+            ) : null}
           </AnimatePresence>
 
           {/* Features Section */}

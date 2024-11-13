@@ -1,149 +1,182 @@
-'use client';
-
-import { useEffect, useRef } from 'react';
 import { analyticsService } from '@/lib/firebase/services/analytics';
 
 interface PerformanceMetrics {
-  fps: number[];
-  memory: number[];
-  networkRequests: number;
-  errorCount: number;
-  interactionDelay: number[];
-}
-
-export function PerformanceMetricsCollector() {
-  const metricsRef = useRef<PerformanceMetrics>({
-    fps: [],
-    memory: [],
-    networkRequests: 0,
-    errorCount: 0,
-    interactionDelay: []
-  });
-
-  useEffect(() => {
-    // FPS Monitoring
-    let frameCount = 0;
-    let lastTime = performance.now();
-
-    const measureFPS = () => {
-      const now = performance.now();
-      frameCount++;
-
-      if (now - lastTime >= 1000) {
-        const fps = Math.round((frameCount * 1000) / (now - lastTime));
-        metricsRef.current.fps.push(fps);
-        
-        if (fps < 30) {
-          analyticsService.trackEvent('performance_degradation', {
-            metric: 'fps',
-            value: fps
-          });
-        }
-
-        frameCount = 0;
-        lastTime = now;
+    fps: number[];
+    memory: number[];
+    networkRequests: number;
+    errorCount: number;
+    interactionDelay: number[];
+    operations: Map<string, { startTime: number; endTime?: number }>;
+  }
+  
+  export class PerformanceMetricsCollector {
+    private metrics: PerformanceMetrics;
+    private cleanup: (() => void)[] = [];
+    private originalFetch: typeof fetch;
+  
+    constructor() {
+      this.metrics = {
+        fps: [],
+        memory: [],
+        networkRequests: 0,
+        errorCount: 0,
+        interactionDelay: [],
+        operations: new Map()
+      };
+      this.originalFetch = window.fetch;
+      this.initializeMonitoring();
+    }
+  
+    startOperation(name: string): void {
+      this.metrics.operations.set(name, {
+        startTime: performance.now()
+      });
+    }
+  
+    endOperation(name: string): void {
+      const operation = this.metrics.operations.get(name);
+      if (operation) {
+        operation.endTime = performance.now();
       }
-
+    }
+  
+    getMetrics(): { responseTime: number } {
+      const lastOperation = Array.from(this.metrics.operations.values()).pop();
+      return {
+        responseTime: lastOperation && lastOperation.endTime 
+          ? lastOperation.endTime - lastOperation.startTime 
+          : 0
+      };
+    }
+  
+    trackError(operation: string): void {
+      this.metrics.errorCount++;
+      analyticsService.trackEvent('operation_error', {
+        operation,
+        totalErrors: this.metrics.errorCount
+      });
+    }
+  
+    recordError(operation: string, error: Error) {
+      this.metrics.errorCount++;
+      analyticsService.trackEvent('operation_error', {
+        operation,
+        error: error.message,
+        totalErrors: this.metrics.errorCount
+      });
+    }
+  
+    private initializeMonitoring(): void {
+      this.setupFPSMonitoring();
+      this.setupMemoryMonitoring();
+      this.setupNetworkMonitoring();
+      this.setupInteractionMonitoring();
+      this.setupPeriodicReporting();
+    }
+  
+    private setupFPSMonitoring(): void {
+      let frameCount = 0;
+      let lastTime = performance.now();
+  
+      const measureFPS = () => {
+        const now = performance.now();
+        frameCount++;
+  
+        if (now - lastTime >= 1000) {
+          const fps = Math.round((frameCount * 1000) / (now - lastTime));
+          this.metrics.fps.push(fps);
+          frameCount = 0;
+          lastTime = now;
+        }
+  
+        const animationFrame = requestAnimationFrame(measureFPS);
+        this.cleanup.push(() => cancelAnimationFrame(animationFrame));
+      };
+  
       requestAnimationFrame(measureFPS);
-    };
-
-    requestAnimationFrame(measureFPS);
-
-    // Memory Monitoring
-    const memoryInterval = setInterval(() => {
-      if ('memory' in performance) {
-        const memory = (performance as any).memory;
-        const usage = memory.usedJSHeapSize / memory.jsHeapSizeLimit;
-        metricsRef.current.memory.push(usage);
-
-        if (usage > 0.9) {
-          analyticsService.trackEvent('performance_warning', {
-            metric: 'memory',
-            usage: usage * 100
-          });
+    }
+  
+    private setupMemoryMonitoring(): void {
+      const memoryInterval = setInterval(() => {
+        if ('memory' in performance) {
+          const memory = (performance as any).memory;
+          const usage = memory.usedJSHeapSize / memory.jsHeapSizeLimit;
+          this.metrics.memory.push(usage);
         }
-      }
-    }, 30000);
-
-    // Network Request Monitoring
-    const originalFetch = window.fetch;
-    window.fetch = async (...args) => {
-      metricsRef.current.networkRequests++;
-      const startTime = performance.now();
-      
-      try {
-        const response = await originalFetch(...args);
-        const duration = performance.now() - startTime;
-
-        if (duration > 3000) {
-          analyticsService.trackEvent('slow_network_request', {
-            duration,
-            url: args[0]
-          });
-        }
-
-        return response;
-      } catch (error) {
-        metricsRef.current.errorCount++;
-        throw error;
-      }
-    };
-
-    // Interaction Delay Monitoring
-    const measureInteractionDelay = () => {
-      const startTime = performance.now();
-      
-      const handler = () => {
-        const delay = performance.now() - startTime;
-        metricsRef.current.interactionDelay.push(delay);
-
-        if (delay > 100) {
-          analyticsService.trackEvent('high_interaction_delay', {
-            delay
-          });
+      }, 30000);
+  
+      this.cleanup.push(() => clearInterval(memoryInterval));
+    }
+  
+    private setupNetworkMonitoring(): void {
+      window.fetch = async (...args) => {
+        this.metrics.networkRequests++;
+        const startTime = performance.now();
+        
+        try {
+          const response = await this.originalFetch(...args);
+          const duration = performance.now() - startTime;
+          return response;
+        } catch (error) {
+          this.metrics.errorCount++;
+          throw error;
         }
       };
-
-      document.addEventListener('click', handler, { once: true });
-    };
-
-    document.addEventListener('mousedown', measureInteractionDelay);
-
-    // Cleanup
-    return () => {
-      clearInterval(memoryInterval);
-      window.fetch = originalFetch;
-      document.removeEventListener('mousedown', measureInteractionDelay);
-    };
-  }, []);
-
-  // Report metrics periodically
-  useEffect(() => {
-    const reportInterval = setInterval(() => {
-      const metrics = metricsRef.current;
-      
-      const averageFPS = metrics.fps.reduce((a, b) => a + b, 0) / metrics.fps.length;
-      const averageMemory = metrics.memory.reduce((a, b) => a + b, 0) / metrics.memory.length;
-      const averageDelay = metrics.interactionDelay.reduce((a, b) => a + b, 0) / metrics.interactionDelay.length;
-
+    }
+  
+    private setupInteractionMonitoring(): void {
+      const measureInteractionDelay = () => {
+        const startTime = performance.now();
+        
+        const handler = () => {
+          const delay = performance.now() - startTime;
+          this.metrics.interactionDelay.push(delay);
+        };
+  
+        document.addEventListener('click', handler, { once: true });
+      };
+  
+      document.addEventListener('mousedown', measureInteractionDelay);
+      this.cleanup.push(() => document.removeEventListener('mousedown', measureInteractionDelay));
+    }
+  
+    private setupPeriodicReporting(): void {
+      const reportInterval = setInterval(() => {
+        this.reportMetrics();
+      }, 60000);
+  
+      this.cleanup.push(() => clearInterval(reportInterval));
+    }
+  
+    private reportMetrics(): void {
+      const metrics = this.metrics;
       analyticsService.trackEvent('performance_metrics', {
-        averageFPS,
-        averageMemory,
+        averageFPS: this.calculateAverage(metrics.fps),
+        averageMemory: this.calculateAverage(metrics.memory),
         networkRequests: metrics.networkRequests,
         errorCount: metrics.errorCount,
-        averageDelay
+        averageDelay: this.calculateAverage(metrics.interactionDelay)
       });
-
-      // Reset counters
-      metrics.fps = [];
-      metrics.memory = [];
-      metrics.networkRequests = 0;
-      metrics.errorCount = 0;
-      metrics.interactionDelay = [];
-    }, 60000); // Report every minute
-
-    return () => clearInterval(reportInterval);
-  }, []);
-
-  return null;
-} 
+  
+      // Reset metrics
+      this.resetMetrics();
+    }
+  
+    private calculateAverage(arr: number[]): number {
+      return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    }
+  
+    private resetMetrics(): void {
+      this.metrics.fps = [];
+      this.metrics.memory = [];
+      this.metrics.networkRequests = 0;
+      this.metrics.errorCount = 0;
+      this.metrics.interactionDelay = [];
+    }
+  
+    dispose(): void {
+      this.cleanup.forEach(cleanup => cleanup());
+      window.fetch = this.originalFetch;
+      this.metrics.operations.clear();
+    }
+  }
