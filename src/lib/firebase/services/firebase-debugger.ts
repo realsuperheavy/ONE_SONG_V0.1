@@ -1,166 +1,195 @@
-import { rtdb } from '@/lib/firebase/config';
-import { ref, get, connectDatabaseEmulator } from 'firebase/database';
-import { analyticsService } from './analytics';
-import type { DiagnosisReport } from '@/debug/types';
+'use client';
+
+import { db, rtdb } from '@/lib/firebase/config';
+import { 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  doc, 
+  setDoc 
+} from 'firebase/firestore';
+import { ref, get, set } from 'firebase/database';
+import { PerformanceMetricsCollector } from '@/lib/monitoring/PerformanceMetricsCollector';
+import { analyticsService } from '@/lib/firebase/services/analytics';
 
 interface DiagnosisReport {
   timestamp: number;
-  healthStatus: 'healthy' | 'unhealthy';
-  issues: string[];
   connectivity: {
     isConnected: boolean;
-  };
-  sync: {
-    conflicts: any;
+    latency: number;
+    lastConnected: number | null;
+    connectionAttempts: number;
   };
   performance: {
-    responseTime: {
-      trend: any;
-    };
+    responseTime: number;
+    memoryUsage: number;
+    errorCount: number;
   };
-  operations: {
-    failureRate: number;
-  };
+  errors: Array<{
+    code: string;
+    message: string;
+    timestamp: number;
+  }>;
+  healthStatus: 'healthy' | 'degraded' | 'critical';
+  recommendations: string[];
 }
 
 export class FirebaseDebugger {
   private readonly eventId: string;
+  private performanceMonitor: PerformanceMetricsCollector;
+  private connectionAttempts: number = 0;
+  private lastConnected: number | null = null;
+  private errors: Array<{code: string; message: string; timestamp: number}> = [];
 
   constructor(eventId: string) {
     this.eventId = eventId;
+    this.performanceMonitor = new PerformanceMetricsCollector();
   }
 
   async diagnoseRealTimeIssue(): Promise<DiagnosisReport> {
-    const isConnected = await this.validateConnection();
-    const conflicts = await this.checkDataConflicts();
-    const performance = await this.checkPerformance();
-    const operations = await this.checkOperations();
+    this.performanceMonitor.startOperation('diagnoseRealTime');
+    const startTime = Date.now();
 
+    try {
+      // Test Realtime Database connection
+      const rtdbStatus = await this.checkRTDBConnection();
+      
+      // Test Firestore connection
+      const firestoreStatus = await this.checkFirestoreConnection();
+      
+      // Get performance metrics
+      const performance = await this.getPerformanceMetrics();
+
+      const isConnected = rtdbStatus && firestoreStatus;
+      if (isConnected) {
+        this.lastConnected = Date.now();
+      }
+
+      const report: DiagnosisReport = {
+        timestamp: Date.now(),
+        connectivity: {
+          isConnected,
+          latency: Date.now() - startTime,
+          lastConnected: this.lastConnected,
+          connectionAttempts: ++this.connectionAttempts
+        },
+        performance,
+        errors: this.errors.slice(-5), // Keep last 5 errors
+        healthStatus: this.determineHealthStatus(isConnected, performance),
+        recommendations: this.generateRecommendations(isConnected, performance)
+      };
+
+      await this.saveDiagnosisReport(report);
+      this.performanceMonitor.endOperation('diagnoseRealTime');
+
+      analyticsService.trackEvent('firebase_diagnosis_complete', {
+        eventId: this.eventId,
+        healthStatus: report.healthStatus,
+        latency: report.connectivity.latency
+      });
+
+      return report;
+    } catch (error) {
+      this.performanceMonitor.trackError('diagnoseRealTime');
+      this.handleError(error as Error);
+      throw error;
+    }
+  }
+
+  private async checkRTDBConnection(): Promise<boolean> {
+    try {
+      const pingRef = ref(rtdb, `debug/${this.eventId}/ping`);
+      await set(pingRef, { timestamp: Date.now() });
+      const snapshot = await get(pingRef);
+      return snapshot.exists();
+    } catch (error) {
+      this.handleError(error as Error);
+      return false;
+    }
+  }
+
+  private async checkFirestoreConnection(): Promise<boolean> {
+    try {
+      const debugRef = doc(db, 'debug', this.eventId);
+      await setDoc(debugRef, { timestamp: Date.now() }, { merge: true });
+      return true;
+    } catch (error) {
+      this.handleError(error as Error);
+      return false;
+    }
+  }
+
+  private async getPerformanceMetrics() {
+    const metrics = this.performanceMonitor.getMetrics();
     return {
-      timestamp: Date.now(),
-      healthStatus: 'healthy',
-      issues: [],
-      connectivity: { isConnected },
-      sync: { conflicts },
-      performance: { responseTime: { trend: this.analyzeTrend(performance) } },
-      operations: { failureRate: operations.failureRate }
+      responseTime: metrics.responseTime || 0,
+      memoryUsage: metrics.memoryUsage || 0,
+      errorCount: this.errors.length
     };
   }
 
-  public async forceReconnect(): Promise<boolean> {
+  private determineHealthStatus(
+    isConnected: boolean,
+    performance: { responseTime: number; errorCount: number }
+  ): DiagnosisReport['healthStatus'] {
+    if (!isConnected || performance.errorCount > 5) {
+      return 'critical';
+    }
+    if (performance.responseTime > 1000 || performance.errorCount > 0) {
+      return 'degraded';
+    }
+    return 'healthy';
+  }
+
+  private generateRecommendations(
+    isConnected: boolean,
+    performance: { responseTime: number; errorCount: number }
+  ): string[] {
+    const recommendations: string[] = [];
+
+    if (!isConnected) {
+      recommendations.push('Check network connectivity');
+      recommendations.push('Verify Firebase configuration');
+    }
+
+    if (performance.responseTime > 1000) {
+      recommendations.push('Implement local caching');
+      recommendations.push('Optimize data queries');
+    }
+
+    if (performance.errorCount > 0) {
+      recommendations.push('Review error patterns');
+      recommendations.push('Implement retry logic');
+    }
+
+    return recommendations;
+  }
+
+  private handleError(error: Error) {
+    this.errors.push({
+      code: error.name,
+      message: error.message,
+      timestamp: Date.now()
+    });
+
+    analyticsService.trackError(error, {
+      context: 'firebase_debugger',
+      eventId: this.eventId,
+      connectionAttempts: this.connectionAttempts
+    });
+  }
+
+  private async saveDiagnosisReport(report: DiagnosisReport): Promise<void> {
     try {
-      await this.setOnlineStatus(true);
-      return this.validateConnection();
+      const reportRef = doc(db, 'debug', this.eventId, 'reports', Date.now().toString());
+      await setDoc(reportRef, report);
     } catch (error) {
-      analyticsService.trackError(error as Error, {
-        context: 'force_reconnect',
-        eventId: this.eventId
-      });
-      return false;
+      this.handleError(error as Error);
     }
   }
 
-  public async validateConnection(): Promise<boolean> {
-    try {
-      const connRef = ref(rtdb, '.info/connected');
-      const snapshot = await get(connRef);
-      return snapshot.val() === true;
-    } catch (error) {
-      analyticsService.trackError(error as Error, {
-        context: 'validate_connection',
-        eventId: this.eventId
-      });
-      return false;
-    }
-  }
-
-  public async resolveDataConflicts(): Promise<string[]> {
-    try {
-      // Implementation for resolving data conflicts
-      return [];
-    } catch (error) {
-      analyticsService.trackError(error as Error, {
-        context: 'resolve_conflicts',
-        eventId: this.eventId
-      });
-      return [];
-    }
-  }
-
-  public async validateDataIntegrity(): Promise<boolean> {
-    try {
-      // Implementation for validating data integrity
-      return true;
-    } catch (error) {
-      analyticsService.trackError(error as Error, {
-        context: 'validate_integrity',
-        eventId: this.eventId
-      });
-      return false;
-    }
-  }
-
-  public async clearCache(): Promise<void> {
-    try {
-      await this.setOnlineStatus(false);
-      await this.setOnlineStatus(true);
-    } catch (error) {
-      analyticsService.trackError(error as Error, {
-        context: 'clear_cache',
-        eventId: this.eventId
-      });
-    }
-  }
-
-  public async optimizeIndexes(): Promise<void> {
-    try {
-      // Implementation for optimizing indexes
-    } catch (error) {
-      analyticsService.trackError(error as Error, {
-        context: 'optimize_indexes',
-        eventId: this.eventId
-      });
-    }
-  }
-
-  public async cleanupResources(): Promise<void> {
-    try {
-      await this.setOnlineStatus(false);
-      await this.setOnlineStatus(true);
-    } catch (error) {
-      analyticsService.trackError(error as Error, {
-        context: 'cleanup_resources',
-        eventId: this.eventId
-      });
-    }
-  }
-
-  private async checkDataConflicts(): Promise<string[]> {
-    return [];
-  }
-
-  private async checkPerformance(): Promise<{ responseTime: number[] }> {
-    return { responseTime: [] };
-  }
-
-  private async checkOperations(): Promise<{ failureRate: number }> {
-    return { failureRate: 0 };
-  }
-
-  private analyzeTrend(performance: { responseTime: number[] }): 'stable' | 'degrading' | 'improving' {
-    return 'stable';
-  }
-
-  private async setOnlineStatus(online: boolean): Promise<void> {
-    if (online) {
-      await ref(rtdb, '.info/connected').set(true);
-    } else {
-      await ref(rtdb, '.info/connected').set(false);
-    }
-  }
-
-  private async reconnectDatabase(): Promise<void> {
-    await this.setOnlineStatus(false);
-    await this.setOnlineStatus(true);
+  dispose(): void {
+    this.performanceMonitor.dispose();
   }
 } 

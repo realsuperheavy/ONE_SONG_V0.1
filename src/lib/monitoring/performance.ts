@@ -1,14 +1,11 @@
-import { PerformanceObserver, performance } from 'perf_hooks';
-import { logger } from '@/lib/utils/logger';
+import { getPerformance } from '@/lib/firebase/services/analytics';
+import type { PerformanceMetrics } from '@/types/analytics';
 
 export class PerformanceMonitor {
   private static instance: PerformanceMonitor;
-  private marks: Map<string, number>;
+  private metrics: Map<string, number[]> = new Map();
 
-  private constructor() {
-    this.marks = new Map();
-    this.setupObserver();
-  }
+  private constructor() {}
 
   static getInstance(): PerformanceMonitor {
     if (!PerformanceMonitor.instance) {
@@ -17,37 +14,34 @@ export class PerformanceMonitor {
     return PerformanceMonitor.instance;
   }
 
-  private setupObserver() {
-    const obs = new PerformanceObserver((list) => {
-      const entries = list.getEntries();
-      entries.forEach((entry) => {
-        logger.info('Performance Entry:', {
-          name: entry.name,
-          duration: entry.duration,
-          startTime: entry.startTime,
-          entryType: entry.entryType
-        });
-      });
-    });
-    
-    obs.observe({ entryTypes: ['measure'] });
-  }
-
-  startMeasure(name: string) {
-    this.marks.set(name, performance.now());
-  }
-
-  endMeasure(name: string) {
-    const startTime = this.marks.get(name);
-    if (startTime) {
-      const duration = performance.now() - startTime;
-      performance.measure(name, {
-        start: startTime,
-        duration
-      });
-      this.marks.delete(name);
-      return duration;
+  trackMetric(name: string, value: number): void {
+    if (!this.metrics.has(name)) {
+      this.metrics.set(name, []);
     }
-    return null;
+    this.metrics.get(name)?.push(value);
+
+    getPerformance()?.measure(name, {
+      detail: { value },
+      start: performance.now()
+    });
+  }
+
+  getMetrics(): PerformanceMetrics {
+    const result: Record<string, number> = {};
+    
+    this.metrics.forEach((values, name) => {
+      const avg = values.reduce((a, b) => a + b, 0) / values.length;
+      result[name] = avg;
+    });
+
+    return {
+      responseTime: result.responseTime || 0,
+      throughput: result.throughput || 0,
+      errorRate: result.errorRate || 0
+    };
+  }
+
+  clearMetrics(): void {
+    this.metrics.clear();
   }
 } 

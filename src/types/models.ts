@@ -3,21 +3,14 @@ import { Timestamp } from 'firebase-admin/firestore';
 export interface SpotifyTrack {
   id: string;
   name: string;
-  artists: {
-    id: string;
-    name: string;
-  }[];
+  artists: Array<{ id: string; name: string }>;
   album: {
     id: string;
     name: string;
-    images: {
-      url: string;
-      height: number;
-      width: number;
-    }[];
+    images: Array<{ url: string; height: number; width: number }>;
   };
   duration_ms: number;
-  uri: string;
+  preview_url: string | null;
 }
 
 export interface SongRequest {
@@ -25,44 +18,46 @@ export interface SongRequest {
   eventId: string;
   userId: string;
   song: {
-    id: string;
     title: string;
     artist: string;
     albumArt?: string;
-    previewUrl?: string;
-    duration: number;
+    duration?: number;
   };
   status: 'pending' | 'approved' | 'rejected' | 'played';
   metadata: {
     requestTime: number;
-    votes: number;
-    tipAmount?: number;
     message?: string;
+    votes: number;
   };
+}
+
+export interface QueueItem extends SongRequest {
+  queuePosition: number;
+  addedAt: string;
 }
 
 export interface Event {
   id: string;
   name: string;
+  details: {
+    name: string;
+    description?: string;
+  };
   djId: string;
-  status: 'active' | 'ended' | 'cancelled' | 'scheduled';
+  status: 'active' | 'ended' | 'paused';
+  stats: {
+    attendeeCount: number;
+    requestCount: number;
+    totalTips: number;
+  };
   settings: {
     allowTips: boolean;
     requireApproval: boolean;
     maxQueueSize: number;
     blacklistedGenres: string[];
   };
-  stats: {
-    attendeeCount: number;
-    requestCount: number;
-    totalTips: number;
-  };
   createdAt: string;
   updatedAt: string;
-  details: {
-    name: string;
-    status: string;
-  };
 }
 
 export interface Request {
@@ -74,23 +69,7 @@ export interface Request {
 export interface User {
   id: string;
   email: string;
-  type: string;
-  profile: {
-    displayName: string;
-    email: string;
-    photoURL: string | null;
-  };
-  settings: {
-    theme: string;
-    notifications: boolean;
-    language: string;
-  };
-  stats: {
-    eventsCreated: number;
-    requestsMade: number;
-    tipsGiven: number;
-  };
-  createdAt: string;
+  displayName?: string;
 }
 
 export interface UserPreferences {

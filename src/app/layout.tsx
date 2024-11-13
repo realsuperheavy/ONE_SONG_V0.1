@@ -1,34 +1,22 @@
 'use client';
 
-import { ThemeProvider } from '@/providers/ThemeProvider';
+import { Providers } from '@/providers';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { useEffect } from 'react';
-import { registerServiceWorker } from '@/lib/serviceWorker/register';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export default function RootLayout({
   children,
 }: {
-  children: any;
+  children: React.ReactNode;
 }) {
-  useEffect(() => {
-    registerServiceWorker();
-  }, []);
-
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <script
-          src="https://sdk.scdn.co/spotify-player.js"
-          async
-        />
-      </head>
+    <html lang="en">
       <body className={inter.className}>
-        <ThemeProvider>
+        <Providers>
           {children}
-        </ThemeProvider>
+        </Providers>
       </body>
     </html>
   );

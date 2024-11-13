@@ -1,146 +1,58 @@
-import { adminDb } from '../firebase/admin';
-import { analyticsService } from '../firebase/services/analytics';
-import type { RateLimit, RateLimitConfig } from '@/types/models';
+import { db } from '@/lib/firebase/config';
+import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
+
+interface RateLimitConfig {
+  maxRequests: number;
+  windowMs: number;
+}
+
+const DEFAULT_CONFIG: RateLimitConfig = {
+  maxRequests: 5,
+  windowMs: 60000 // 1 minute
+};
 
 export class RateLimitService {
-  private readonly defaultConfig: RateLimitConfig = {
-    request: {
-      limit: 10,
-      windowSeconds: 60 // 1 minute
-    },
-    search: {
-      limit: 30,
-      windowSeconds: 60 // 1 minute
-    },
-    attendee: {
-      limit: 5,
-      windowSeconds: 300 // 5 minutes
-    }
-  };
+  private readonly userId: string;
+  private readonly eventId: string;
 
-  constructor(
-    private readonly db = adminDb,
-    private readonly config: RateLimitConfig = defaultConfig
-  ) {}
+  constructor(userId: string, eventId: string) {
+    this.userId = userId;
+    this.eventId = eventId;
+  }
 
-  async checkRateLimit(
-    userId: string,
-    resourceType: RateLimit['resourceType']
-  ): Promise<boolean> {
-    const rateLimitRef = this.db
-      .collection('rate_limits')
-      .doc(`${userId}_${resourceType}`);
+  async checkRateLimit(): Promise<boolean> {
+    const rateRef = doc(db, `events/${this.eventId}/rateLimits/${this.userId}`);
+    const rateDoc = await getDoc(rateRef);
 
-    try {
-      return await this.db.runTransaction(async (transaction) => {
-        const doc = await transaction.get(rateLimitRef);
-        const now = new Date();
-        const config = this.config[resourceType];
+    const now = Timestamp.now();
+    const windowStart = new Timestamp(
+      now.seconds - (DEFAULT_CONFIG.windowMs / 1000),
+      now.nanoseconds
+    );
 
-        if (!doc.exists) {
-          // First request, create new rate limit entry
-          const rateLimit: RateLimit = {
-            userId,
-            resourceType,
-            count: 1,
-            window: {
-              start: now,
-              end: new Date(now.getTime() + config.windowSeconds * 1000)
-            },
-            limit: config.limit
-          };
-          transaction.set(rateLimitRef, rateLimit);
-          return true;
-        }
-
-        const rateLimit = doc.data() as RateLimit;
-        const windowEnd = rateLimit.window.end.toDate();
-
-        if (now > windowEnd) {
-          // Window expired, reset counter
-          const newRateLimit: RateLimit = {
-            ...rateLimit,
-            count: 1,
-            window: {
-              start: now,
-              end: new Date(now.getTime() + config.windowSeconds * 1000)
-            }
-          };
-          transaction.set(rateLimitRef, newRateLimit);
-          return true;
-        }
-
-        if (rateLimit.count >= config.limit) {
-          // Rate limit exceeded
-          analyticsService.trackEvent('rate_limit_exceeded', {
-            userId,
-            resourceType,
-            currentCount: rateLimit.count,
-            limit: config.limit
-          });
-          return false;
-        }
-
-        // Increment counter
-        transaction.update(rateLimitRef, {
-          count: rateLimit.count + 1
-        });
-        return true;
+    if (!rateDoc.exists()) {
+      await setDoc(rateRef, {
+        requests: [now],
+        lastRequest: now
       });
-    } catch (error) {
-      analyticsService.trackError(error as Error, {
-        context: 'rate_limit_check',
-        userId,
-        resourceType
-      });
-      // Fail open if rate limiting fails
       return true;
     }
-  }
 
-  async getRateLimitStatus(
-    userId: string,
-    resourceType: RateLimit['resourceType']
-  ): Promise<{
-    remaining: number;
-    resetAt: Date;
-  }> {
-    const doc = await this.db
-      .collection('rate_limits')
-      .doc(`${userId}_${resourceType}`)
-      .get();
+    const data = rateDoc.data();
+    const requests = data.requests.filter((timestamp: Timestamp) => 
+      timestamp.toMillis() > windowStart.toMillis()
+    );
 
-    if (!doc.exists) {
-      return {
-        remaining: this.config[resourceType].limit,
-        resetAt: new Date(Date.now() + this.config[resourceType].windowSeconds * 1000)
-      };
+    if (requests.length >= DEFAULT_CONFIG.maxRequests) {
+      return false;
     }
 
-    const rateLimit = doc.data() as RateLimit;
-    const now = new Date();
-    const windowEnd = rateLimit.window.end.toDate();
+    requests.push(now);
+    await setDoc(rateRef, {
+      requests,
+      lastRequest: now
+    });
 
-    if (now > windowEnd) {
-      return {
-        remaining: this.config[resourceType].limit,
-        resetAt: new Date(now.getTime() + this.config[resourceType].windowSeconds * 1000)
-      };
-    }
-
-    return {
-      remaining: Math.max(0, this.config[resourceType].limit - rateLimit.count),
-      resetAt: windowEnd
-    };
-  }
-
-  async clearRateLimit(
-    userId: string,
-    resourceType: RateLimit['resourceType']
-  ): Promise<void> {
-    await this.db
-      .collection('rate_limits')
-      .doc(`${userId}_${resourceType}`)
-      .delete();
+    return true;
   }
 } 

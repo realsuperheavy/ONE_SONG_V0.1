@@ -1,0 +1,44 @@
+@layer utilities {
+  .layout-container {
+    @apply max-w-7xl mx-auto px-6;
+  }
+
+  .header-fixed {
+    @apply fixed top-0 left-0 right-0 h-[60px] bg-background z-50 
+           border-b border-white/10 backdrop-blur-sm;
+  }
+
+  .sidebar {
+    @apply fixed top-[60px] left-0 bottom-0 w-[280px] bg-background z-40 
+           border-r border-white/10 hidden lg:block;
+  }
+
+  .main-content {
+    @apply pt-[60px] lg:pl-[280px] min-h-screen;
+  }
+
+  .content-grid {
+    @apply grid gap-6 p-6;
+    @apply md:grid-cols-2 lg:grid-cols-3;
+  }
+
+  .gutter {
+    @apply p-6; /* 24px */
+  }
+}
+
+/* Responsive adaptations */
+@media (max-width: 768px) {
+  .sidebar {
+    @apply fixed inset-0 w-full 
+           transform -translate-x-full transition-transform duration-300;
+  }
+
+  .sidebar-open {
+    @apply translate-x-0;
+  }
+
+  .main-content {
+    @apply pl-0;
+  }
+} 

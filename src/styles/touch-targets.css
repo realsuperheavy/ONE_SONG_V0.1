@@ -1,0 +1,36 @@
+@layer utilities {
+  /* Touch Target Sizes - Following WCAG 2.5.5 */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+    @apply flex items-center justify-center;
+  }
+
+  /* Touch Target Spacing */
+  .touch-spacing > * {
+    @apply my-2;  /* Minimum 8px spacing between targets */
+  }
+
+  /* Mobile-specific adjustments */
+  @media (max-width: 768px) {
+    /* Increase button sizes */
+    .btn {
+      @apply min-h-[44px] min-w-[44px] px-4;
+      @apply text-base; /* Larger text for better tappability */
+    }
+
+    /* Adjust form controls */
+    .form-control {
+      @apply min-h-[44px];
+    }
+
+    /* Increase tap targets for links */
+    .link {
+      @apply py-2 px-3 inline-block;
+    }
+
+    /* Adjust list item spacing */
+    .list-item {
+      @apply py-3;
+    }
+  }
+} 

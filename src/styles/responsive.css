@@ -1,0 +1,62 @@
+@layer utilities {
+  /* Mobile-first responsive classes */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  .stack-layout {
+    @apply flex flex-col space-y-4;
+  }
+
+  .grid-layout {
+    @apply grid gap-4;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  /* Font scaling */
+  .responsive-text {
+    font-size: clamp(14px, 4vw, 16px);
+  }
+
+  .responsive-heading {
+    font-size: clamp(24px, 6vw, 48px);
+  }
+
+  /* Image scaling */
+  .responsive-image {
+    @apply w-full h-auto max-w-full;
+    aspect-ratio: attr(width) / attr(height);
+  }
+
+  /* Touch-friendly spacing */
+  .touch-spacing > * {
+    @apply my-2;
+  }
+
+  /* Responsive container padding */
+  .container-padding {
+    @apply px-4 md:px-6 lg:px-8;
+  }
+}
+
+/* Tablet-specific layouts */
+@screen md {
+  .two-column-layout {
+    @apply grid grid-cols-2 gap-6;
+  }
+
+  .sidebar-layout {
+    @apply grid grid-cols-[280px,1fr] gap-6;
+  }
+}
+
+/* Desktop optimizations */
+@screen lg {
+  .multi-column-layout {
+    @apply grid grid-cols-3 gap-8;
+  }
+
+  .widescreen-layout {
+    @apply max-w-7xl mx-auto;
+  }
+} 

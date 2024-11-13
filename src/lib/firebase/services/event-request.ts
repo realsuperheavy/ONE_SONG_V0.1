@@ -1,139 +1,49 @@
-import { adminDb } from '../admin';
-import type { Event, SongRequest } from '@/types/models';
-import { analyticsService } from './analytics';
-import { RateLimitService } from './rate-limit';
-import { AppError } from '@/lib/error/AppError';
-import { onSnapshot, doc, updateDoc, arrayRemove } from 'firebase/firestore';
-import { getFirestore } from 'firebase/firestore';
+import { db } from '../config';
+import { collection, addDoc, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { RateLimitService } from '@/lib/services/rate-limit';
+import type { SongRequest } from '@/types/models';
 
 export class EventRequestService {
-  private rateLimiter: RateLimitService;
-
-  constructor(private readonly db = adminDb) {
-    this.rateLimiter = new RateLimitService();
-  }
-
-  async linkRequestToEvent(
+  async createRequest(
     eventId: string,
-    requestId: string,
-    userId: string
-  ): Promise<void> {
-    return this.db.runTransaction(async (transaction) => {
-      // Get event and request docs
-      const eventRef = this.db.collection('events').doc(eventId);
-      const requestRef = this.db.collection('requests').doc(requestId);
-      
-      const [eventDoc, requestDoc] = await Promise.all([
-        transaction.get(eventRef),
-        transaction.get(requestRef)
-      ]);
+    userId: string,
+    request: Partial<SongRequest>
+  ): Promise<string> {
+    const rateLimitService = new RateLimitService(userId, eventId);
+    const canRequest = await rateLimitService.checkRateLimit();
 
-      if (!eventDoc.exists) throw new Error('Event not found');
-      if (!requestDoc.exists) throw new Error('Request not found');
-
-      const event = eventDoc.data() as Event;
-      const request = requestDoc.data() as SongRequest;
-
-      // Update request with event reference
-      transaction.update(requestRef, {
-        eventId,
-        status: event.settings.requireApproval ? 'pending' : 'approved',
-        updatedAt: new Date()
-      });
-
-      // Update event stats
-      transaction.update(eventRef, {
-        'stats.requestCount': event.stats.requestCount + 1,
-        updatedAt: new Date()
-      });
-
-      // Track the connection
-      analyticsService.trackEvent('request_linked_to_event', {
-        eventId,
-        requestId,
-        userId
-      });
-    });
-  }
-
-  async getEventRequests(
-    eventId: string,
-    options: {
-      status?: SongRequest['status'];
-      limit?: number;
-      orderBy?: 'votes' | 'requestTime';
-    } = {}
-  ): Promise<SongRequest[]> {
-    let query = this.db
-      .collection('requests')
-      .where('eventId', '==', eventId);
-
-    if (options.status) {
-      query = query.where('status', '==', options.status);
+    if (!canRequest) {
+      throw new Error('Rate limit exceeded. Please try again later.');
     }
 
-    if (options.orderBy) {
-      const orderByField = options.orderBy === 'votes' 
-        ? 'metadata.votes' 
-        : 'metadata.requestTime';
-      query = query.orderBy(orderByField, 'desc');
-    }
+    const requestRef = collection(db, `events/${eventId}/requests`);
+    
+    const requestData: Omit<SongRequest, 'id'> = {
+      eventId,
+      userId,
+      song: request.song!,
+      status: 'pending',
+      metadata: {
+        requestTime: Date.now(),
+        message: request.metadata?.message,
+        votes: 0
+      }
+    };
 
-    if (options.limit) {
-      query = query.limit(options.limit);
-    }
-
-    const snapshot = await query.get();
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as SongRequest));
+    const docRef = await addDoc(requestRef, requestData);
+    return docRef.id;
   }
 
-  async createRequest(eventId: string, userId: string, requestData: Partial<SongRequest>): Promise<void> {
-    const canProceed = await this.rateLimiter.checkRateLimit(userId, 'request');
-    if (!canProceed) {
-      throw new AppError({
-        code: 'RATE_LIMIT_EXCEEDED',
-        message: 'Too many requests. Please try again later.',
-        context: { userId, eventId }
-      });
+  async voteForRequest(eventId: string, requestId: string, userId: string): Promise<void> {
+    const requestRef = doc(db, `events/${eventId}/requests/${requestId}`);
+    const request = await getDoc(requestRef);
+    
+    if (!request.exists()) {
+      throw new Error('Request not found');
     }
 
-    try {
-      // Existing implementation
-    } catch (error: unknown) {
-      throw new AppError({
-        code: 'OPERATION_FAILED',
-        message: 'Failed to create request',
-        context: { 
-          eventId, 
-          userId, 
-          error: error instanceof Error ? error.message : String(error)
-        }
-      });
-    }
-  }
-
-  subscribeToQueue(eventId: string, callback: (queue: SongRequest[]) => void) {
-    const eventRef = doc(getFirestore(), 'events', eventId);
-    return onSnapshot(eventRef, (doc) => {
-      const data = doc.data();
-      callback(data?.queue || []);
-    });
-  }
-
-  async updateQueueOrder(eventId: string, songIds: string[]) {
-    const eventRef = doc(getFirestore(), 'events', eventId);
-    await updateDoc(eventRef, {
-      queue: songIds
-    });
-  }
-
-  async removeFromQueue(eventId: string, songId: string) {
-    const eventRef = doc(getFirestore(), 'events', eventId);
-    await updateDoc(eventRef, {
-      queue: arrayRemove(songId)
+    await updateDoc(requestRef, {
+      'metadata.votes': (request.data() as SongRequest).metadata.votes + 1
     });
   }
 } 

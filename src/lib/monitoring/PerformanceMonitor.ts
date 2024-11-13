@@ -1,170 +1,94 @@
-import { ref, set, serverTimestamp } from '@firebase/database';
-import { rtdb } from '@/lib/firebase/config';
 import { analyticsService } from '@/lib/firebase/services/analytics';
-import { AlertSystem } from '@/lib/analytics/AlertSystem';
-import { CustomMetricsManager } from '@/lib/analytics/CustomMetricsManager';
-import { Cache } from '@/lib/cache';
 
 interface PerformanceMetrics {
   responseTime: number;
-  cpuUsage: number;
-  memoryUsage: number;
-  errorRate: number;
-  requestCount: number;
-}
-
-interface PerformanceThresholds {
-  responseTime: number;
-  cpuUsage: number;
-  memoryUsage: number;
-  errorRate: number;
+  queueOperationTime: number;
+  songRequestTime: number;
+  errorCount: number;
+  totalOperations: number;
 }
 
 export class PerformanceMonitor {
-  private readonly eventId: string;
-  private readonly alertSystem: AlertSystem;
-  private readonly metricsManager: CustomMetricsManager;
-  private readonly metricsCache: Cache<PerformanceMetrics>;
-  private readonly thresholds: PerformanceThresholds;
+  private static instance: PerformanceMonitor;
+  private metrics: Map<string, number[]> = new Map();
+  private startTimes: Map<string, number> = new Map();
 
-  constructor(eventId: string, thresholds?: Partial<PerformanceThresholds>) {
-    this.eventId = eventId;
-    this.alertSystem = new AlertSystem();
-    this.metricsManager = new CustomMetricsManager();
-    this.metricsCache = new Cache<PerformanceMetrics>({ maxSize: 1000 });
+  private constructor() {
+    // Initialize metrics
+    this.metrics.set('responseTime', []);
+    this.metrics.set('queueOperationTime', []);
+    this.metrics.set('songRequestTime', []);
+    this.metrics.set('errorCount', [0]);
+    this.metrics.set('totalOperations', [0]);
+  }
+
+  static getInstance(): PerformanceMonitor {
+    if (!PerformanceMonitor.instance) {
+      PerformanceMonitor.instance = new PerformanceMonitor();
+    }
+    return PerformanceMonitor.instance;
+  }
+
+  startOperation(operationType: string): void {
+    this.startTimes.set(operationType, performance.now());
+    this.incrementMetric('totalOperations');
+
+    analyticsService.trackEvent('operation_started', {
+      operationType,
+      timestamp: Date.now()
+    });
+  }
+
+  endOperation(operationType: string): void {
+    const startTime = this.startTimes.get(operationType);
+    if (startTime) {
+      const duration = performance.now() - startTime;
+      this.addMetric(operationType, duration);
+      this.startTimes.delete(operationType);
+
+      analyticsService.trackEvent('operation_completed', {
+        operationType,
+        duration,
+        timestamp: Date.now()
+      });
+    }
+  }
+
+  trackError(operationType: string): void {
+    this.incrementMetric('errorCount');
     
-    this.thresholds = {
-      responseTime: thresholds?.responseTime || 1000, // 1 second
-      cpuUsage: thresholds?.cpuUsage || 80, // 80%
-      memoryUsage: thresholds?.memoryUsage || 85, // 85%
-      errorRate: thresholds?.errorRate || 0.05 // 5%
-    };
-
-    this.initializeAlertRules();
-  }
-
-  /**
-   * Initialize performance-related alert rules
-   */
-  private initializeAlertRules(): void {
-    this.alertSystem.registerRule({
-      id: 'high_response_time',
-      name: 'High Response Time',
-      description: 'Response time exceeded threshold',
-      condition: async () => {
-        const metrics = await this.getCurrentMetrics();
-        return metrics.responseTime > this.thresholds.responseTime;
-      },
-      severity: 'warning',
-      throttleMs: 60000 // 1 minute
-    });
-
-    this.alertSystem.registerRule({
-      id: 'high_error_rate',
-      name: 'High Error Rate',
-      description: 'Error rate exceeded threshold',
-      condition: async () => {
-        const metrics = await this.getCurrentMetrics();
-        return metrics.errorRate > this.thresholds.errorRate;
-      },
-      severity: 'error',
-      throttleMs: 300000 // 5 minutes
+    analyticsService.trackEvent('performance_error', {
+      operationType,
+      timestamp: Date.now(),
+      currentMetrics: this.getMetrics()
     });
   }
 
-  /**
-   * Record performance metrics
-   */
-  async recordMetrics(metrics: Partial<PerformanceMetrics>): Promise<void> {
-    try {
-      const timestamp = Date.now();
-      const currentMetrics = await this.getCurrentMetrics();
-      const updatedMetrics = { ...currentMetrics, ...metrics };
-
-      // Store in cache
-      await this.metricsCache.set(timestamp.toString(), updatedMetrics);
-
-      // Store in database
-      const metricsRef = ref(rtdb, `performance/${this.eventId}/${timestamp}`);
-      await set(metricsRef, {
-        ...updatedMetrics,
-        timestamp: serverTimestamp()
-      });
-
-      // Track in analytics
-      analyticsService.trackEvent('performance_metrics_recorded', {
-        eventId: this.eventId,
-        metrics: updatedMetrics
-      });
-
-      // Check thresholds
-      await this.checkThresholds(updatedMetrics);
-    } catch (error) {
-      analyticsService.trackError(error as Error, {
-        context: 'record_performance_metrics',
-        eventId: this.eventId
-      });
-      throw error;
-    }
+  private addMetric(name: string, value: number): void {
+    const metrics = this.metrics.get(name) || [];
+    metrics.push(value);
+    this.metrics.set(name, metrics.slice(-100)); // Keep last 100 measurements
   }
 
-  /**
-   * Get current performance metrics
-   */
-  private async getCurrentMetrics(): Promise<PerformanceMetrics> {
-    const defaultMetrics: PerformanceMetrics = {
-      responseTime: 0,
-      cpuUsage: 0,
-      memoryUsage: 0,
-      errorRate: 0,
-      requestCount: 0
+  private incrementMetric(name: string): void {
+    const metrics = this.metrics.get(name) || [0];
+    metrics[metrics.length - 1]++;
+    this.metrics.set(name, metrics);
+  }
+
+  getMetrics(): PerformanceMetrics {
+    return {
+      responseTime: this.calculateAverage('responseTime'),
+      queueOperationTime: this.calculateAverage('queueOperationTime'),
+      songRequestTime: this.calculateAverage('songRequestTime'),
+      errorCount: this.metrics.get('errorCount')?.[0] || 0,
+      totalOperations: this.metrics.get('totalOperations')?.[0] || 0
     };
-
-    const cachedMetrics = await this.metricsCache.get('latest');
-    return cachedMetrics || defaultMetrics;
   }
 
-  /**
-   * Check performance thresholds and trigger alerts if needed
-   */
-  private async checkThresholds(metrics: PerformanceMetrics): Promise<void> {
-    await Promise.all([
-      this.alertSystem.checkRules('high_response_time'),
-      this.alertSystem.checkRules('high_error_rate')
-    ]);
-
-    // Record threshold violations in metrics
-    if (metrics.responseTime > this.thresholds.responseTime) {
-      await this.metricsManager.recordMetric('response_time_violations', 1);
-    }
-    if (metrics.errorRate > this.thresholds.errorRate) {
-      await this.metricsManager.recordMetric('error_rate_violations', 1);
-    }
-  }
-
-  /**
-   * Generate performance report
-   */
-  async generateReport(timeRange: { start: number; end: number }): Promise<PerformanceMetrics> {
-    try {
-      const metrics = await this.metricsManager.getMetrics(
-        ['responseTime', 'cpuUsage', 'memoryUsage', 'errorRate', 'requestCount'],
-        timeRange
-      );
-
-      return {
-        responseTime: metrics.responseTime.avg || 0,
-        cpuUsage: metrics.cpuUsage.avg || 0,
-        memoryUsage: metrics.memoryUsage.avg || 0,
-        errorRate: metrics.errorRate.avg || 0,
-        requestCount: metrics.requestCount.sum || 0
-      };
-    } catch (error) {
-      analyticsService.trackError(error as Error, {
-        context: 'generate_performance_report',
-        eventId: this.eventId
-      });
-      throw error;
-    }
+  private calculateAverage(metricName: string): number {
+    const metrics = this.metrics.get(metricName) || [];
+    if (metrics.length === 0) return 0;
+    return metrics.reduce((a, b) => a + b, 0) / metrics.length;
   }
 } 

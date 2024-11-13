@@ -1,138 +1,130 @@
-import { FirebaseApp } from 'firebase/app';
-import { 
-  getDatabase, 
-  ref, 
-  onDisconnect, 
-  set, 
-  get, 
-  Database,
-  goOnline,
-  goOffline,
-  connectDatabaseEmulator
-} from 'firebase/database';
+'use client';
+
+import { rtdb } from '@/lib/firebase/config';
+import { ref, get, set } from 'firebase/database';
+import { PerformanceMetricsCollector } from '@/lib/monitoring/PerformanceMetricsCollector';
 import { analyticsService } from '@/lib/firebase/services/analytics';
-
-interface SyncStatus {
-  success: boolean;
-  timestamp: number;
-}
-
-interface DatabaseSnapshot {
-  [key: string]: any;
-}
-
-interface Operation {
-  id: string;
-  type: string;
-  success: boolean;
-  duration: number;
-  timestamp: number;
-}
+import type { DiagnosisReport } from '@/debug/types';
 
 export class FirebaseDebugger {
-  private readonly app: FirebaseApp;
-  private readonly db: Database;
-  public connectionAttempts: number = 0;
+  private readonly eventId: string;
+  private performanceMonitor: PerformanceMetricsCollector;
+  private connectionAttempts: number = 0;
+  private lastConnected: number | null = null;
 
-  constructor(app: FirebaseApp) {
-    this.app = app;
-    this.db = getDatabase(app);
-    if (process.env.NODE_ENV === 'development') {
-      connectDatabaseEmulator(this.db, 'localhost', 9000);
-    }
+  constructor(eventId: string) {
+    this.eventId = eventId;
+    this.performanceMonitor = new PerformanceMetricsCollector();
   }
 
-  async checkDatabaseSync(): Promise<SyncStatus> {
+  async diagnoseRealTimeIssue(): Promise<DiagnosisReport> {
+    this.performanceMonitor.startOperation('diagnoseRealTime');
+    const startTime = Date.now();
+    let isConnected = false;
+    let errors: Array<{code: string; message: string; timestamp: number}> = [];
+    this.connectionAttempts++;
+
     try {
-      await goOnline(this.db);
-      return {
-        success: true,
+      const debugRef = ref(rtdb, `debug/${this.eventId}/status`);
+      await set(debugRef, { timestamp: startTime });
+      const snapshot = await get(debugRef);
+      isConnected = snapshot.exists();
+
+      if (isConnected) {
+        this.lastConnected = Date.now();
+      }
+
+      this.performanceMonitor.endOperation('diagnoseRealTime');
+      analyticsService.trackEvent('firebase_diagnosis', {
+        eventId: this.eventId,
+        status: 'success',
+        latency: Date.now() - startTime,
+        metrics: this.performanceMonitor.getMetrics()
+      });
+    } catch (error) {
+      this.performanceMonitor.trackError('diagnoseRealTime');
+      errors.push({
+        code: error instanceof Error ? error.name : 'UNKNOWN_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error occurred',
         timestamp: Date.now()
-      };
+      });
+
+      analyticsService.trackError(error as Error, {
+        context: 'firebase_diagnosis',
+        eventId: this.eventId,
+        connectionAttempts: this.connectionAttempts
+      });
+    }
+
+    const connectivity = {
+      isConnected,
+      latency: Date.now() - startTime,
+      lastConnected: this.lastConnected || 0,
+      connectionAttempts: this.connectionAttempts
+    };
+
+    const report: DiagnosisReport = {
+      timestamp: Date.now(),
+      connectivity,
+      healthStatus: this.determineHealthStatus(connectivity),
+      errors,
+      performance: this.performanceMonitor.getMetrics(),
+      recommendations: this.generateRecommendations(connectivity, errors)
+    };
+
+    await this.saveDiagnosisReport(report);
+    return report;
+  }
+
+  private determineHealthStatus(connectivity: {
+    isConnected: boolean;
+    latency: number;
+  }): 'healthy' | 'degraded' | 'critical' {
+    if (!connectivity.isConnected) return 'critical';
+    if (connectivity.latency > 3000) return 'degraded';
+    return 'healthy';
+  }
+
+  private generateRecommendations(
+    connectivity: { isConnected: boolean; latency: number },
+    errors: Array<{ code: string }>
+  ): string[] {
+    const recommendations: string[] = [];
+
+    if (!connectivity.isConnected) {
+      recommendations.push('Check network connectivity');
+    }
+
+    if (connectivity.latency > 3000) {
+      recommendations.push('Consider implementing local caching');
+    }
+
+    if (errors.length > 0) {
+      recommendations.push('Review error patterns and implement retry logic');
+    }
+
+    return recommendations;
+  }
+
+  private async saveDiagnosisReport(report: DiagnosisReport): Promise<void> {
+    try {
+      const reportRef = ref(rtdb, `debug/${this.eventId}/reports/latest`);
+      await set(reportRef, report);
+      
+      analyticsService.trackEvent('diagnosis_report_saved', {
+        eventId: this.eventId,
+        healthStatus: report.healthStatus,
+        errorCount: report.errors.length
+      });
     } catch (error) {
       analyticsService.trackError(error as Error, {
-        context: 'database_sync_check'
+        context: 'save_diagnosis_report',
+        eventId: this.eventId
       });
-      return {
-        success: false,
-        timestamp: Date.now()
-      };
     }
   }
 
-  async checkCacheSync(): Promise<SyncStatus> {
-    // Implementation for cache sync check
-    return {
-      success: true,
-      timestamp: Date.now()
-    };
-  }
-
-  async getDatabaseSnapshot(): Promise<DatabaseSnapshot> {
-    const rootRef = ref(this.db, '/');
-    const snapshot = await get(rootRef);
-    return snapshot.val() || {};
-  }
-
-  async getCacheSnapshot(): Promise<DatabaseSnapshot> {
-    // Implementation for getting cache snapshot
-    return {};
-  }
-
-  async getRecentOperations(): Promise<Operation[]> {
-    const opsRef = ref(this.db, 'operations');
-    const snapshot = await get(opsRef);
-    return snapshot.val() || [];
-  }
-
-  async forceReconnect(): Promise<void> {
-    this.connectionAttempts++;
-    const connRef = ref(this.db, '.info/connected');
-    await set(connRef, null);
-    return new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-
-  async validateConnection(): Promise<boolean> {
-    const connRef = ref(this.db, '.info/connected');
-    return new Promise<boolean>((resolve) => {
-      onDisconnect(connRef).remove();
-      resolve(true);
-    });
-  }
-
-  async forceSyncData(): Promise<void> {
-    await goOnline(this.db);
-  }
-
-  async resolveDataConflicts(): Promise<void> {
-    const conflicts = await this.getDataConflicts();
-    for (const conflict of conflicts) {
-      await this.resolveConflict(conflict);
-    }
-  }
-
-  async validateDataIntegrity(): Promise<{ success: boolean }> {
-    return { success: true };
-  }
-
-  async clearCache(): Promise<void> {
-    await goOffline(this.db);
-    await goOnline(this.db);
-  }
-
-  async optimizeIndexes(): Promise<void> {
-    // Implementation for index optimization
-  }
-
-  async cleanupResources(): Promise<void> {
-    // Implementation for resource cleanup
-  }
-
-  private async getDataConflicts(): Promise<any[]> {
-    return [];
-  }
-
-  private async resolveConflict(conflict: any): Promise<void> {
-    // Implementation for conflict resolution
+  dispose(): void {
+    this.performanceMonitor.dispose();
   }
 } 

@@ -1,95 +1,152 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { useAuthStore } from '@/store/auth';
-import { useEventStore } from '@/store/event';
 import { useQueueStore } from '@/store/queue';
-import { QueueManager } from '@/components/queue/QueueManager';
-import { eventService } from '@/lib/firebase/services/event';
+import { useEventStore } from '@/store/event';
+import { QueueItem } from '@/components/queue/QueueItem';
+import { Button } from '@/components/ui/button';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { SongRequestModal } from '@/components/song-request/SongRequestModal';
+import { PlaylistManager } from '@/components/dj/PlaylistManager';
+import { useToast } from '@/hooks/useToast';
+import { useQueueManager } from '@/hooks/useQueueManager';
+import { analyticsService } from '@/lib/firebase/services/analytics';
+import type { SongRequest } from '@/types/models';
 
 export default function QueuePage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const user = useAuthStore((state) => state.user);
-  const { currentEvent, setCurrentEvent } = useEventStore();
-  const { loading, error } = useQueueStore();
+  const { queue, loading, error } = useQueueStore();
+  const { currentEvent } = useEventStore();
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const { showToast } = useToast();
+  const { addToQueue } = useQueueManager(eventId);
 
   useEffect(() => {
-    if (!eventId) return;
-
-    const unsubscribe = eventService.subscribeToEvent(eventId, (event) => {
-      setCurrentEvent(event);
+    analyticsService.trackEvent('page_view', {
+      page: 'queue',
+      eventId,
+      eventName: currentEvent?.name
     });
 
-    return () => unsubscribe();
-  }, [eventId, setCurrentEvent]);
+    return () => {
+      analyticsService.trackEvent('page_exit', {
+        page: 'queue',
+        eventId,
+        duration: Date.now() - performance.now()
+      });
+    };
+  }, [eventId, currentEvent?.name]);
 
-  if (!user) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <p>Please sign in to view the queue.</p>
-      </div>
-    );
-  }
+  const handleSongRequest = async (requestData: Partial<SongRequest>) => {
+    try {
+      await addToQueue({
+        ...requestData,
+        eventId,
+        status: 'pending'
+      } as Omit<SongRequest, 'id'>);
+      
+      showToast({
+        title: "Success",
+        description: "Song request submitted successfully",
+        variant: "default"
+      });
+      setShowRequestModal(false);
+      
+      analyticsService.trackEvent('song_request_submitted', {
+        eventId,
+        songTitle: requestData.song?.title,
+        success: true
+      });
+    } catch (error) {
+      showToast({
+        title: "Error",
+        description: "Failed to submit request",
+        variant: "destructive"
+      });
+      analyticsService.trackError(error as Error, {
+        context: 'song_request_submission',
+        eventId,
+        songTitle: requestData.song?.title
+      });
+    }
+  };
 
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <p>Loading queue...</p>
+        <LoadingSpinner />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <p className="text-red-500">{error}</p>
-      </div>
-    );
-  }
-
-  if (!currentEvent) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <p>Event not found</p>
+      <div className="text-red-500 text-center p-4">
+        {error}
       </div>
     );
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Queue Management - {currentEvent.details.name}
-        </h1>
-        <p className="text-gray-600">
-          Manage your song queue and control the flow of music
-        </p>
-      </div>
-
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h2 className="text-lg font-semibold">Current Queue</h2>
-              <p className="text-sm text-gray-500">
-                Drag and drop songs to reorder
-              </p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-500">
-                Event Status: {currentEvent.status}
-              </span>
-              <span className="text-sm text-gray-500">
-                Queue Size: {currentEvent.settings.maxQueueSize}
-              </span>
-            </div>
-          </div>
-
-          <QueueManager eventId={eventId} />
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-2xl font-bold">
+            {currentEvent?.name} Queue
+          </h1>
+          <p className="text-sm text-gray-500">
+            {queue.length} songs in queue
+          </p>
         </div>
+        <Button 
+          onClick={() => {
+            setShowRequestModal(true);
+            analyticsService.trackEvent('request_modal_opened', {
+              eventId,
+              queueLength: queue.length
+            });
+          }}
+        >
+          Request Song
+        </Button>
       </div>
+
+      {currentEvent && (
+        <div className="mb-8">
+          <PlaylistManager eventId={eventId} isAttendee={true} />
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {queue.map((item) => (
+          <QueueItem
+            key={item.id}
+            item={item}
+            eventId={eventId}
+            isDragging={false}
+            onRemove={() => {}}
+          />
+        ))}
+        {queue.length === 0 && (
+          <p className="text-center text-gray-500 py-8">
+            No songs in queue. Be the first to request!
+          </p>
+        )}
+      </div>
+
+      <SongRequestModal
+        open={showRequestModal}
+        onClose={() => {
+          setShowRequestModal(false);
+          analyticsService.trackEvent('request_modal_closed', {
+            eventId
+          });
+        }}
+        onSubmit={handleSongRequest}
+        eventId={eventId}
+      />
     </div>
   );
 } 

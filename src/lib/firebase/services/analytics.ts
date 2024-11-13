@@ -1,34 +1,51 @@
-import { logEvent } from 'firebase/analytics';
-import { analytics } from '../config';
+import { getAnalytics, logEvent } from 'firebase/analytics';
+import { getApp } from 'firebase/app';
+import type { ErrorReport } from '@/debug/types';
 
-export interface AnalyticsService {
-  trackEvent: (eventName: string, params?: Record<string, any>) => void;
-  trackError: (error: Error, context?: Record<string, any>) => void;
-  trackEventMetrics: (eventId: string) => void;
-  stopTracking: (eventId: string) => void;
-}
+export const analyticsService = {
+  trackError: (error: Error, context?: Record<string, any>) => {
+    const analytics = getAnalytics(getApp());
+    logEvent(analytics, 'error', {
+      error_message: error.message,
+      error_stack: error.stack,
+      ...context
+    });
+  },
 
-export const analyticsService: AnalyticsService = {
-  trackEvent: (eventName, params) => {
-    if (analytics) {
-      logEvent(analytics, eventName, params);
-    }
+  trackEvent: (eventName: string, params?: Record<string, any>) => {
+    const analytics = getAnalytics(getApp());
+    logEvent(analytics, eventName, params);
   },
-  trackError: (error, context) => {
-    if (analytics) {
-      logEvent(analytics, 'error', {
-        error_name: error.name,
-        error_message: error.message,
-        stack: error.stack,
-        timestamp: Date.now(),
-        ...context
-      });
-    }
+
+  trackUserAction: (action: string, params?: Record<string, any>) => {
+    const analytics = getAnalytics(getApp());
+    logEvent(analytics, `user_action_${action}`, params);
   },
-  trackEventMetrics: (eventId) => {
-    // Implementation
+
+  trackAttendeeAction: (action: string, params?: Record<string, any>) => {
+    const analytics = getAnalytics(getApp());
+    logEvent(analytics, `attendee_${action}`, {
+      timestamp: Date.now(),
+      ...params
+    });
   },
-  stopTracking: (eventId) => {
-    // Implementation
+
+  trackEventActivity: (eventId: string, action: string, params?: Record<string, any>) => {
+    const analytics = getAnalytics(getApp());
+    logEvent(analytics, `event_${action}`, {
+      eventId,
+      timestamp: Date.now(),
+      ...params
+    });
+  },
+
+  trackRequestActivity: (eventId: string, requestId: string, action: string, params?: Record<string, any>) => {
+    const analytics = getAnalytics(getApp());
+    logEvent(analytics, `request_${action}`, {
+      eventId,
+      requestId,
+      timestamp: Date.now(),
+      ...params
+    });
   }
 };

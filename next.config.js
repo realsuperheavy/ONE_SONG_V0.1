@@ -1,16 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  images: {
-    domains: ['i.scdn.co', 'mosaic.scdn.co', 'platform-lookaside.fbsbx.com'],
+  experimental: {
+    serverActions: true,
   },
   webpack: (config) => {
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      crypto: false,
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'undici': false,
     };
     return config;
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig; 

@@ -1,96 +1,112 @@
+import { db } from '../config';
 import { 
-  doc, 
   collection, 
-  addDoc, 
-  updateDoc, 
+  doc, 
   getDoc, 
   query, 
   where, 
-  onSnapshot 
-} from '@firebase/firestore';
-import { db } from '../config';
-import { Event } from '@/types/models';
+  getDocs, 
+  updateDoc 
+} from 'firebase/firestore';
+import { PerformanceMonitor } from '@/lib/monitoring/PerformanceMonitor';
+import { analyticsService } from '@/lib/firebase/services/analytics';
+import type { Event } from '@/types/models';
+
+const performanceMonitor = PerformanceMonitor.getInstance();
 
 export const eventService = {
-  createEvent: async (eventData: Partial<Event>, djId: string): Promise<string> => {
+  getEventByCode: async (code: string): Promise<Event> => {
+    performanceMonitor.startOperation('getEventByCode');
     try {
-      const eventRef = collection(db, 'events');
-      const newEvent = {
-        ...eventData,
-        djId,
-        status: 'active',
-        stats: {
-          attendeeCount: 0,
-          requestCount: 0,
-          totalTips: 0
-        },
-        settings: {
-          ...eventData.settings,
-          allowTips: true,
-          requireApproval: true,
-          maxQueueSize: 50,
-          blacklistedGenres: []
-        },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+      const eventsRef = collection(db, 'events');
+      const q = query(eventsRef, where('code', '==', code));
+      const querySnapshot = await getDocs(q);
 
-      const docRef = await addDoc(eventRef, newEvent);
-      return docRef.id;
-    } catch (error) {
-      throw new Error(`Failed to create event: ${error}`);
-    }
-  },
+      if (querySnapshot.empty) {
+        performanceMonitor.trackError('getEventByCode');
+        analyticsService.trackEvent('event_lookup_failed', {
+          code,
+          reason: 'not_found',
+          duration: performanceMonitor.getMetrics().responseTime
+        });
+        throw new Error('Event not found');
+      }
 
-  updateEvent: async (eventId: string, updates: Partial<Event>): Promise<void> => {
-    try {
-      const eventRef = doc(db, 'events', eventId);
-      await updateDoc(eventRef, {
-        ...updates,
-        updatedAt: new Date().toISOString()
+      const eventDoc = querySnapshot.docs[0];
+      const event = { id: eventDoc.id, ...eventDoc.data() } as Event;
+
+      performanceMonitor.endOperation('getEventByCode');
+      analyticsService.trackEvent('event_lookup_success', {
+        eventId: event.id,
+        code,
+        duration: performanceMonitor.getMetrics().responseTime
       });
+
+      return event;
     } catch (error) {
-      throw new Error(`Failed to update event: ${error}`);
+      performanceMonitor.trackError('getEventByCode');
+      analyticsService.trackError(error as Error, {
+        context: 'get_event_by_code',
+        code
+      });
+      throw error;
     }
   },
 
   getEvent: async (eventId: string): Promise<Event> => {
+    performanceMonitor.startOperation('getEvent');
     try {
       const eventRef = doc(db, 'events', eventId);
       const eventDoc = await getDoc(eventRef);
-      
+
       if (!eventDoc.exists()) {
+        performanceMonitor.trackError('getEvent');
+        analyticsService.trackEvent('event_lookup_failed', {
+          eventId,
+          reason: 'not_found',
+          duration: performanceMonitor.getMetrics().responseTime
+        });
         throw new Error('Event not found');
       }
 
-      return { id: eventDoc.id, ...eventDoc.data() } as Event;
+      const event = { id: eventDoc.id, ...eventDoc.data() } as Event;
+      
+      performanceMonitor.endOperation('getEvent');
+      analyticsService.trackEvent('event_lookup_success', {
+        eventId,
+        duration: performanceMonitor.getMetrics().responseTime
+      });
+
+      return event;
     } catch (error) {
-      throw new Error(`Failed to get event: ${error}`);
+      performanceMonitor.trackError('getEvent');
+      analyticsService.trackError(error as Error, {
+        context: 'get_event',
+        eventId
+      });
+      throw error;
     }
   },
 
-  subscribeToEvent: (eventId: string, callback: (event: Event) => void) => {
-    const eventRef = doc(db, 'events', eventId);
-    
-    return onSnapshot(eventRef, (doc) => {
-      if (doc.exists()) {
-        callback({ id: doc.id, ...doc.data() } as Event);
-      }
-    });
-  },
-
-  getDJEvents: (djId: string, callback: (events: Event[]) => void) => {
-    const eventsQuery = query(
-      collection(db, 'events'),
-      where('djId', '==', djId)
-    );
-
-    return onSnapshot(eventsQuery, (snapshot) => {
-      const events = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Event[];
-      callback(events);
-    });
+  updateEvent: async (eventId: string, updates: Partial<Event>): Promise<void> => {
+    performanceMonitor.startOperation('updateEvent');
+    try {
+      const eventRef = doc(db, 'events', eventId);
+      await updateDoc(eventRef, updates);
+      
+      performanceMonitor.endOperation('updateEvent');
+      analyticsService.trackEvent('event_updated', {
+        eventId,
+        updatedFields: Object.keys(updates),
+        duration: performanceMonitor.getMetrics().responseTime
+      });
+    } catch (error) {
+      performanceMonitor.trackError('updateEvent');
+      analyticsService.trackError(error as Error, {
+        context: 'update_event',
+        eventId
+      });
+      throw error;
+    }
   }
 }; 

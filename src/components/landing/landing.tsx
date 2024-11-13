@@ -1,250 +1,163 @@
-import { useState, useRef, useEffect } from 'react';
+'use client';
+
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Music2, QrCode, ArrowRight, MapPin, Users, Clock } from 'lucide-react';
-import { QRScannerDialog } from '@/components/qr/qr-scanner-dialog';
-import { cn } from '@/lib/utils';
-import { HeroSection } from './hero-section';
-import { FeatureSection } from './feature-section';
-import { UserSelection } from './user-selection';
-import { useToast } from '@/hooks/use-toast';
-import { Badge } from '@/components/ui/badge';
-import { PhoneAuthForm } from '@/components/auth/phone-auth-form';
+import { Button } from '@/components/ui/button';
+import { JoinEventForm } from '@/components/events/JoinEventForm';
+import { NearbyEvents } from '@/components/events/NearbyEvents';
+import { useToast } from '@/hooks/useToast';
+import { eventService } from '@/lib/firebase/services/event';
+import { analyticsService } from '@/lib/firebase/services/analytics';
+import { PerformanceMetricsCollector } from '@/lib/monitoring/PerformanceMetricsCollector';
+import { StatusIndicator } from '@/components/ui/status/StatusSystem';
+import { useAccessibility } from '@/providers/accessibility/AccessibilityProvider';
+import { motion, AnimatePresence } from 'framer-motion';
 
-interface LiveEvent {
-  id: string;
-  name: string;
-  venue: string;
-  status: 'active' | 'ending' | 'full';
-  attendeeCount: number;
-  distance?: string;
-}
-
-export function LandingPage() {
-  const [selectedUserType, setSelectedUserType] = useState<'attendee' | 'dj' | null>(null);
-  const [showScanner, setShowScanner] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [nearbyEvents, setNearbyEvents] = useState<LiveEvent[]>([]);
-  const backgroundRef = useRef<HTMLDivElement>(null);
+export function Landing() {
+  const [showNearbyEvents, setShowNearbyEvents] = useState(false);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { showToast } = useToast();
-  const [eventCode, setEventCode] = useState('');
+  const { announceMessage } = useAccessibility();
+  const performanceMonitor = new PerformanceMetricsCollector();
 
-  // Mouse tracking effect for interactive background
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (backgroundRef.current) {
-        const { left, top } = backgroundRef.current.getBoundingClientRect();
-        setMousePosition({
-          x: e.clientX - left,
-          y: e.clientY - top,
-        });
-      }
-    };
+    performanceMonitor.startOperation('landingPageLoad');
+    analyticsService.trackEvent('page_view', { page: 'landing' });
 
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    return () => {
+      performanceMonitor.endOperation('landingPageLoad');
+      performanceMonitor.dispose();
+    };
   }, []);
 
-  // Simulated nearby events data
-  useEffect(() => {
-    if (selectedUserType === 'attendee') {
-      setNearbyEvents([
-        {
-          id: '1',
-          name: 'Summer Vibes Party',
-          venue: 'The Grand Club',
-          status: 'active',
-          attendeeCount: 156,
-          distance: '0.5 miles'
-        },
-        {
-          id: '2',
-          name: 'Night Bass',
-          venue: 'Club Echo',
-          status: 'ending',
-          attendeeCount: 89,
-          distance: '1.2 miles'
-        },
-        {
-          id: '3',
-          name: 'Club Vibes',
-          venue: 'Neon Nightclub',
-          status: 'full',
-          attendeeCount: 200,
-          distance: '2.1 miles'
-        }
-      ]);
-    }
-  }, [selectedUserType]);
-
-  const handleUserTypeSelect = (type: 'attendee' | 'dj') => {
-    setSelectedUserType(type);
-    if (type === 'dj') {
-      router.push('/auth/phone');
-    }
-  };
-
   const handleJoinEvent = async (code: string) => {
-    setIsSubmitting(true);
-    try {
-      router.push(`/event/${code}`);
-    } catch (error) {
-      showToast("Error message", "error");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    setLoading(true);
+    performanceMonitor.startOperation('joinEvent');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (eventCode.trim()) {
-      handleJoinEvent(eventCode.trim().toUpperCase());
+    try {
+      const event = await eventService.getEventByCode(code);
+      
+      // Announce for screen readers
+      announceMessage(`Joining event ${event.name}`);
+
+      analyticsService.trackEvent('event_join_attempt', {
+        method: 'code',
+        eventId: event.id,
+        success: true,
+        duration: performanceMonitor.getMetrics().responseTime
+      });
+
+      router.push(`/events/${event.id}/queue`);
+    } catch (error) {
+      showToast({
+        title: "Error",
+        description: "Invalid event code. Please try again.",
+        variant: "destructive"
+      });
+
+      // Announce error for screen readers
+      announceMessage('Error joining event. Invalid code.');
+
+      analyticsService.trackEvent('event_join_attempt', {
+        method: 'code',
+        code,
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+
+      performanceMonitor.trackError('joinEvent');
+    } finally {
+      setLoading(false);
+      performanceMonitor.endOperation('joinEvent');
     }
   };
 
   return (
-    <div 
-      ref={backgroundRef}
-      className="min-h-screen bg-background flex flex-col"
-      style={{
-        backgroundImage: `radial-gradient(
-          600px at ${mousePosition.x}px ${mousePosition.y}px,
-          rgba(var(--primary-rgb), 0.15),
-          transparent 80%
-        )`
-      }}
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+      className="min-h-screen bg-gradient-to-b from-[#1E1E1E] to-[#2E2F2E]"
     >
-      {/* Navbar */}
-      <div className="w-full border-b bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Music2 className="h-4 w-4 text-primary" />
+      <div className="container mx-auto px-4 py-8 md:py-16">
+        <div className="max-w-md mx-auto space-y-8">
+          {/* Hero Section */}
+          <div className="text-center space-y-4">
+            <h1 className="text-4xl md:text-5xl font-bold text-white">
+              OneSong
+            </h1>
+            <p className="text-lg text-white/80">
+              Join the party, request your song
+            </p>
+          </div>
+
+          {/* Join Event Card */}
+          <Card className="p-6 bg-white/5 backdrop-blur-sm border border-white/10">
+            <h2 className="text-2xl font-bold text-white mb-6 text-center">
+              Join an Event
+            </h2>
+            
+            <JoinEventForm 
+              onSubmit={handleJoinEvent}
+              disabled={loading}
+            />
+
+            {loading && (
+              <div className="mt-4">
+                <StatusIndicator
+                  type="loading"
+                  message="Joining event..."
+                />
+              </div>
+            )}
+            
+            <div className="mt-6 pt-6 border-t border-white/10">
+              <Button
+                variant="secondary"
+                className="w-full bg-white/5 hover:bg-white/10 text-white"
+                onClick={() => {
+                  setShowNearbyEvents(!showNearbyEvents);
+                  analyticsService.trackEvent('nearby_events_toggled', {
+                    action: showNearbyEvents ? 'hide' : 'show'
+                  });
+                }}
+                aria-expanded={showNearbyEvents}
+              >
+                {showNearbyEvents ? 'Hide Nearby Events' : 'Show Nearby Events'}
+              </Button>
             </div>
-            <span className="font-bold tracking-tight">OneSong</span>
+          </Card>
+
+          {/* Nearby Events Section */}
+          <AnimatePresence>
+            {showNearbyEvents && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <NearbyEvents />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Features Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-white/80">
+            <Card className="p-4 bg-white/5 backdrop-blur-sm border border-white/10">
+              <h3 className="font-semibold mb-2">Request Songs</h3>
+              <p className="text-sm">Choose your favorite tracks and add them to the queue</p>
+            </Card>
+            <Card className="p-4 bg-white/5 backdrop-blur-sm border border-white/10">
+              <h3 className="font-semibold mb-2">Real-time Updates</h3>
+              <p className="text-sm">See the queue update instantly as songs are added</p>
+            </Card>
           </div>
         </div>
       </div>
-
-      {/* Hero Section */}
-      <HeroSection />
-
-      {/* Main Content */}
-      <div className="container mx-auto px-4 py-12">
-        <div className="max-w-md mx-auto space-y-8">
-          {/* User Type Selection */}
-          <UserSelection 
-            selectedType={selectedUserType}
-            onSelect={handleUserTypeSelect}
-          />
-
-          {/* Event Code Input */}
-          {selectedUserType === 'attendee' && (
-            <div className="space-y-4 animate-in fade-in-50 slide-in-from-bottom-5">
-              <PhoneAuthForm 
-                onSuccess={(userId) => {
-                  router.push(`/attendee/${userId}`);
-                }}
-              />
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">
-                    or
-                  </span>
-                </div>
-              </div>
-
-              <Button
-                variant="outline"
-                className="w-full h-14 text-lg font-medium gap-2"
-                onClick={() => setShowScanner(true)}
-              >
-                <QrCode className="h-5 w-5" />
-                Scan QR Code
-              </Button>
-            </div>
-          )}
-
-          {/* Live Events Section */}
-          {selectedUserType === 'attendee' && nearbyEvents.length > 0 && (
-            <div className="space-y-4 animate-in fade-in-50 slide-in-from-bottom-5">
-              <h2 className="text-lg font-semibold">Events Near You</h2>
-              <div className="space-y-3">
-                {nearbyEvents.map((event) => (
-                  <Card 
-                    key={event.id}
-                    className="p-4 hover:bg-secondary/50 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-medium truncate">{event.name}</h3>
-                          <Badge
-                            variant={
-                              event.status === 'active' ? 'default' :
-                              event.status === 'ending' ? 'secondary' :
-                              'destructive'
-                            }
-                          >
-                            {event.status === 'active' && (
-                              <span className="flex items-center gap-1">
-                                <span className="w-1 h-1 rounded-full bg-current animate-pulse" />
-                                Live
-                              </span>
-                            )}
-                            {event.status === 'ending' && 'Ending Soon'}
-                            {event.status === 'full' && 'Full'}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <MapPin className="h-4 w-4" />
-                            <span className="truncate">{event.venue}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Users className="h-4 w-4" />
-                            <span>{event.attendeeCount}</span>
-                          </div>
-                          {event.distance && (
-                            <div className="flex items-center gap-1">
-                              <Clock className="h-4 w-4" />
-                              <span>{event.distance}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <Button
-                        onClick={() => handleJoinEvent(event.id)}
-                        disabled={event.status === 'full'}
-                      >
-                        Join
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Features Section */}
-      <FeatureSection />
-
-      {/* QR Scanner Dialog */}
-      <QRScannerDialog
-        open={showScanner}
-        onOpenChange={setShowScanner}
-        onScan={handleJoinEvent}
-      />
-    </div>
+    </motion.div>
   );
 }

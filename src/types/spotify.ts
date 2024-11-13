@@ -1,10 +1,28 @@
-export interface SpotifyTrack {
+export interface SpotifyApiTrack {
   id: string;
-  title: string;
-  artist: string;
-  albumArt?: string;
-  duration: number;
-  previewUrl?: string;
-  popularity: number;
-  explicit: boolean;
+  name: string;
+  artists: Array<{
+    id: string;
+    name: string;
+  }>;
+  album: {
+    id: string;
+    name: string;
+    images: Array<{
+      url: string;
+      height: number;
+      width: number;
+    }>;
+  };
+  duration_ms: number;
+  preview_url: string | null;
+}
+
+export interface SpotifySearchResponse {
+  tracks: {
+    items: SpotifyApiTrack[];
+    total: number;
+    limit: number;
+    offset: number;
+  };
 } 

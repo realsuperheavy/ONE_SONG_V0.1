@@ -1,13 +1,11 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getDatabase } from 'firebase/database';
-import { Analytics, getAnalytics, isSupported } from 'firebase/analytics';
+import { getAuth } from 'firebase/auth';
+import { getAnalytics, isSupported } from 'firebase/analytics';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
@@ -15,30 +13,14 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-// Initialize Firebase services
-const app = getApps()[0] || initializeApp(firebaseConfig);
+// Initialize Firebase
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const db = getFirestore(app);
 const auth = getAuth(app);
-const firestore = getFirestore(app);
-const rtdb = getDatabase(app);
 
-// Initialize analytics with proper type handling
-let analyticsInstance: Analytics | undefined;
+// Initialize Analytics conditionally
+let analytics = null;
+isSupported().then(yes => yes && (analytics = getAnalytics(app)));
 
-const initializeAnalytics = async (): Promise<Analytics | undefined> => {
-  if (typeof window !== 'undefined' && await isSupported()) {
-    analyticsInstance = getAnalytics(app);
-    return analyticsInstance;
-  }
-  return undefined;
-};
-
-export {
-  app,
-  auth,
-  firestore,
-  rtdb,
-  initializeAnalytics,
-  analyticsInstance as analytics
-};
-
-export default app;
+// Make sure to export db
+export { app, db, auth, analytics };

@@ -1,80 +1,59 @@
-import { 
-  collection, 
-  doc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc,
-  query, 
-  where, 
-  onSnapshot,
-  orderBy,
-  writeBatch
-} from '@firebase/firestore';
 import { db } from '../config';
-import { SongRequest } from '@/types/models';
-
-export interface QueueItem extends SongRequest {
-  queuePosition: number;
-  addedAt: string;
-}
+import { collection, doc, addDoc, deleteDoc, onSnapshot, query, orderBy, limit, startAfter, getDocs } from 'firebase/firestore';
+import type { QueueItem } from '@/types/models';
 
 export const queueService = {
-  addToQueue: async (request: SongRequest): Promise<string> => {
-    try {
-      const queueRef = collection(db, 'queues');
-      const queueItem: QueueItem = {
-        ...request,
-        queuePosition: 0, // Will be updated in batch
-        addedAt: new Date().toISOString()
-      };
-
-      const docRef = await addDoc(queueRef, queueItem);
-      return docRef.id;
-    } catch (error) {
-      throw new Error(`Failed to add to queue: ${error}`);
-    }
-  },
-
-  removeFromQueue: async (eventId: string, queueItemId: string): Promise<void> => {
-    try {
-      const queueRef = doc(db, 'queues', queueItemId);
-      await deleteDoc(queueRef);
-    } catch (error) {
-      throw new Error(`Failed to remove from queue: ${error}`);
-    }
-  },
-
-  reorderQueue: async (eventId: string, newOrder: string[]): Promise<void> => {
-    try {
-      const batch = writeBatch(db);
-
-      newOrder.forEach((itemId, index) => {
-        const queueRef = doc(db, 'queues', itemId);
-        batch.update(queueRef, { queuePosition: index });
-      });
-
-      await batch.commit();
-    } catch (error) {
-      throw new Error(`Failed to reorder queue: ${error}`);
-    }
-  },
-
-  subscribeToQueue: (
-    eventId: string, 
-    callback: (queue: QueueItem[]) => void
-  ) => {
-    const queueQuery = query(
-      collection(db, 'queues'),
-      where('eventId', '==', eventId),
-      orderBy('queuePosition', 'asc')
-    );
+  subscribeToQueue: (eventId: string, callback: (queue: QueueItem[]) => void) => {
+    const queueRef = collection(db, `events/${eventId}/queue`);
+    const queueQuery = query(queueRef, orderBy('queuePosition'));
 
     return onSnapshot(queueQuery, (snapshot) => {
-      const queue = snapshot.docs.map(doc => ({
+      const queueItems = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as QueueItem[];
-      callback(queue);
+      callback(queueItems);
     });
+  },
+
+  addToQueue: async (eventId: string, item: Omit<QueueItem, 'id' | 'queuePosition'>): Promise<string> => {
+    const queueRef = collection(db, `events/${eventId}/queue`);
+    const newItem = {
+      ...item,
+      queuePosition: 0,
+      addedAt: new Date().toISOString()
+    };
+
+    const docRef = await addDoc(queueRef, newItem);
+    return docRef.id;
+  },
+
+  removeFromQueue: async (eventId: string, itemId: string): Promise<void> => {
+    const itemRef = doc(db, `events/${eventId}/queue/${itemId}`);
+    await deleteDoc(itemRef);
+  },
+
+  reorderQueue: async (eventId: string, newOrder: string[]): Promise<void> => {
+    const batch = db.batch();
+
+    newOrder.forEach((itemId, index) => {
+      const itemRef = doc(db, `events/${eventId}/queue/${itemId}`);
+      batch.update(itemRef, { queuePosition: index });
+    });
+
+    await batch.commit();
+  },
+
+  getQueuePaginated: async (eventId: string, pageSize: number, lastItemId?: string): Promise<QueueItem[]> => {
+    const queueRef = collection(db, `events/${eventId}/queue`);
+    let queueQuery = query(queueRef, orderBy('queuePosition'), limit(pageSize));
+
+    if (lastItemId) {
+      const lastItemDoc = await getDocs(doc(db, `events/${eventId}/queue/${lastItemId}`));
+      queueQuery = query(queueQuery, startAfter(lastItemDoc));
+    }
+
+    const snapshot = await getDocs(queueQuery);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as QueueItem));
   }
 }; 

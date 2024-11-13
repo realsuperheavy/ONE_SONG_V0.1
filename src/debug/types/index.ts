@@ -2,62 +2,42 @@
 export interface DiagnosisReport {
   timestamp: number;
   healthStatus: 'healthy' | 'degraded' | 'critical';
-  connectivity: { isConnected: boolean };
-  sync: { conflicts: string[] };
-  operations: { failureRate: number };
-  performance: { 
-    responseTime: { 
-      trend: 'stable' | 'degrading' | 'improving'
-    } 
-  };
+  connectivity: ConnectivityStatus;
+  sync: SyncStatus;
+  operations: OperationMetrics;
+  performance: PerformanceMetrics;
   recommendations: string[];
   severity: 'low' | 'medium' | 'high' | 'critical';
+  errors: Array<{
+    code: string;
+    message: string;
+    timestamp: number;
+  }>;
 }
 
 export interface ConnectivityStatus {
   isConnected: boolean;
+  latency: number;
   lastConnected: number;
   connectionAttempts: number;
-  latency: number;
 }
 
 export interface SyncStatus {
-  isSynced: boolean;
-  lastSync: number;
-  operations: SyncOperation[];
-  conflicts: string[];
+  lastSyncTime: number;
+  pendingOperations: number;
+  syncErrors: number;
 }
 
-export interface SyncOperation extends Operation {
-  status: 'success' | 'failure';
+export interface OperationMetrics {
+  totalOperations: number;
+  failedOperations: number;
+  successRate: number;
 }
 
-export interface OperationsStatus {
-  total: number;
-  successful: number;
-  failed: number;
-  failureRate: number;
-  recentFailures: Operation[];
-  averageLatency: number;
-}
-
-export interface Operation {
-  type: 'read' | 'write' | 'update' | 'delete';
-  timestamp: number;
-  duration: number;
-}
-
-export interface PerformanceStatus {
-  responseTime: MetricTrend;
-  memoryUsage: MetricTrend;
-  networkLatency: MetricTrend;
-}
-
-export interface MetricTrend {
-  current: number;
-  average: number;
-  trend: 'improving' | 'stable' | 'degrading';
-  history: number[];
+export interface PerformanceMetrics {
+  responseTime: number;
+  throughput: number;
+  errorRate: number;
 }
 
 // Success tracking types
@@ -88,17 +68,6 @@ export interface MetricReport {
   performance: PerformanceMetrics;
   reliability: ReliabilityMetrics;
   userExperience: UXMetrics;
-}
-
-export interface PerformanceMetrics {
-  responseTime: number;
-  memoryUsage: number;
-  networkLatency: number;
-  averages: {
-    last1m: number;
-    last5m: number;
-    last15m: number;
-  };
 }
 
 export interface ReliabilityMetrics {
