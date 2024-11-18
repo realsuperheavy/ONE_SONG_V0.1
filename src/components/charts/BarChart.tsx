@@ -4,19 +4,25 @@ import { getChartColors } from '@/utils/charts';
 import { ChartConfiguration, ChartData as ChartJsData } from 'chart.js';
 
 interface BarChartProps {
-  data: ChartData[];
-  xAxis: string;
-  yAxis: string;
-  color: string;
+  data: any[];
+  xLabel: string;
+  yLabel: string;
+  color?: string;
+  barWidth?: number;
+  grouped?: boolean;
+  onTooltip?: (value: number, type: string) => string;
   height?: number;
   className?: string;
 }
 
 export const BarChart: React.FC<BarChartProps> = ({
   data,
-  xAxis,
-  yAxis,
-  color,
+  xLabel,
+  yLabel,
+  color = '#000',
+  barWidth = 0.8,
+  grouped = false,
+  onTooltip,
   height = 250,
   className
 }) => {
@@ -27,7 +33,7 @@ export const BarChart: React.FC<BarChartProps> = ({
     data: {
       labels: data.map(item => item.label),
       datasets: [{
-        label: yAxis,
+        label: yLabel,
         data: data.map(item => item.value),
         backgroundColor: colors as unknown as string[],
         borderColor: colors as unknown as string[],
@@ -39,11 +45,12 @@ export const BarChart: React.FC<BarChartProps> = ({
       maintainAspectRatio: false,
       plugins: {
         legend: {
-          display: !!yAxis
+          display: !!yLabel
         },
         tooltip: {
           mode: 'index',
-          intersect: false
+          intersect: false,
+          formatter: onTooltip || ((value: number) => `${value}`)
         }
       },
       scales: {

@@ -1,73 +1,59 @@
-## Security & Compliance
+# OneSong Project
 
-### Authentication & Authorization
-- JWT-based authentication
-- Role-based access control (RBAC)
-- Session management with secure tokens
-- OAuth 2.0 integration for Spotify
+## Overview
 
-### Data Protection
-- End-to-end encryption for sensitive data
-- Data at rest encryption using Firebase security
-- Secure webhook payload transmission
-- PII (Personally Identifiable Information) handling
+OneSong is a real-time collaborative music playlist application that allows attendees to request songs during live events.
 
-### Compliance Standards
-- GDPR compliance for EU users
-- CCPA compliance for California users
-- HIPAA-aligned data handling
-- PCI DSS compliance for payment processing
+## Features
 
-### Security Measures
-1. **API Security**
-   - Rate limiting
-   - Request validation
-   - Input sanitization
-   - CORS policies
+- User authentication via Firebase Auth.
+- Real-time event updates using Firestore listeners.
+- Spotify API integration for song search and playback.
+- Event management for DJs to create and manage events.
+- Webhook support for event notifications.
 
-2. **Infrastructure Security**
-   - Firebase Security Rules
-   - Network isolation
-   - DDoS protection
-   - Regular security audits
+## Setup Instructions
 
-3. **Application Security**
-   - XSS prevention
-   - CSRF protection
-   - SQL injection prevention
-   - Secure dependency management
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/yourusername/onesong.git
+   cd onesong
+   ```
 
-4. **Monitoring & Auditing**
-   - Security event logging
-   - Access audit trails
-   - Real-time threat detection
-   - Automated vulnerability scanning
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-### Security Configuration 
+3. **Set up environment variables**:
 
-### Codebase Statistics
-- **Total Lines of Code**: {LOC}
-- **Repository Size**: {SIZE}
-- **Languages**:
-  - TypeScript: {TS_PERCENT}%
-  - JavaScript: {JS_PERCENT}%
-  - CSS/SCSS: {CSS_PERCENT}%
-  - Other: {OTHER_PERCENT}%
+   - Create a `.env.local` file in the root directory.
+   - Add your Firebase and Spotify API credentials.
 
-- **Code Quality Metrics**:
-  - Test Coverage: {COVERAGE}%
-  - Code Documentation: {DOC_PERCENT}%
-  - Code Duplication: {DUP_PERCENT}%
-  - Technical Debt Ratio: {DEBT_RATIO}%
+4. **Run the development server**:
+   ```bash
+   npm run dev
+   ```
 
-- **Dependencies**:
-  - Production Dependencies: {PROD_DEP_COUNT}
-  - Development Dependencies: {DEV_DEP_COUNT}
-  - Security Vulnerabilities: {VULN_COUNT}
-  - Outdated Packages: {OUTDATED_COUNT}
+5. **Deploy to Firebase**:
+   ```bash
+   firebase deploy
+   ```
 
-- **Build & Performance**:
-  - Build Time: {BUILD_TIME}
-  - Bundle Size: {BUNDLE_SIZE}
-  - Lighthouse Score: {LIGHTHOUSE_SCORE}
-  - Performance Index: {PERF_INDEX}
+## Code Structure
+
+- `src/`: Main application source code.
+  - `components/`: React components organized by feature.
+  - `context/`: React context providers.
+  - `hooks/`: Custom React hooks.
+  - `lib/`: Library code including Firebase and Spotify services.
+  - `types/`: TypeScript type definitions.
+- `functions/`: Firebase Functions code.
+
+## Contributing
+
+Contributions are welcome! Please open an issue or submit a pull request.
+
+## License
+
+MIT License

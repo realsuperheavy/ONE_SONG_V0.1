@@ -1,27 +1,24 @@
 export type WebhookEventType = 
-  | 'song.requested'
-  | 'song.approved'
-  | 'song.rejected'
-  | 'event.started'
-  | 'event.ended'
-  | 'user.joined';
+  | 'event_created'
+  | 'event_updated'
+  | 'event_deleted'
+  | 'request_received'
+  | 'request_updated';
 
 export interface WebhookConfig {
   id: string;
   url: string;
   secret: string;
-  enabled: boolean;
   events: WebhookEventType[];
-  timeout?: number;
-  retryCount?: number;
-  createdAt: Date;
-  updatedAt: Date;
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
 }
 
-export interface WebhookPayload {
+export interface WebhookEventPayload {
   eventType: WebhookEventType;
-  timestamp: number;
   data: unknown;
+  timestamp: number;
   signature: string;
 }
 

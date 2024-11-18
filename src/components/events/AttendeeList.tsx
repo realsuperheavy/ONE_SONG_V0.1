@@ -17,7 +17,7 @@ export function AttendeeList({ eventId, isEventActive = true, onAttendeeCountCha
   const toast = useToast();
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
+  const fetchAttendees = useCallback(() => {
     if (isEventActive) {
       try {
         unsubscribeRef.current = attendeeService.subscribeToAttendeeUpdates(
@@ -47,13 +47,17 @@ export function AttendeeList({ eventId, isEventActive = true, onAttendeeCountCha
         clearInterval(presenceInterval);
       };
     }
-  }, [eventId, isEventActive]);
+  }, [eventId, isEventActive, attendeeService, toast]);
+
+  useEffect(() => {
+    fetchAttendees();
+  }, [attendeeService, onAttendeeCountChange, toast, fetchAttendees]);
 
   const handleStatusUpdate = async (attendeeId: string, newStatus: AttendeeSession['status']) => {
     try {
       await attendeeService.updateAttendeeStatus(eventId, attendeeId, newStatus);
       toast.success('Attendee status updated');
-      await loadAttendees();
+      await fetchAttendees();
     } catch (err) {
       toast.error('Failed to update attendee status');
       console.error('Failed to update status:', err);
@@ -68,7 +72,7 @@ export function AttendeeList({ eventId, isEventActive = true, onAttendeeCountCha
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold">Attendees ({attendees.length})</h3>
         <button 
-          onClick={() => loadAttendees()}
+          onClick={() => fetchAttendees()}
           className="text-sm text-gray-500 hover:text-gray-700"
         >
           Refresh

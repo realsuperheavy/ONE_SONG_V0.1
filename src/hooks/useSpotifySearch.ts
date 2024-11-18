@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { spotifyService } from '@/lib/spotify/services/spotify';
 import type { SpotifyTrack } from '@/types/models';
 import type { SpotifyApiTrack } from '@/types/spotify';
@@ -9,6 +9,8 @@ export function useSpotifySearch() {
   const [results, setResults] = useState<SpotifyApiTrack[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+
+  const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const search = useCallback(async (query: string) => {
     if (!query.trim()) {

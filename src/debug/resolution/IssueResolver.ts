@@ -71,7 +71,7 @@ export class IssueResolver {
     this.resolutionAttempts = new Map();
   }
 
-  async resolveIssue(issue: Issue): Promise<ResolutionResult> {
+  async resolveIssue(issue: Issue, debuggerInstance: Debugger): Promise<ResolutionResult> {
     const issueId = this.generateIssueId(issue);
     const attempts = this.resolutionAttempts.get(issueId) || 0;
 

@@ -1,8 +1,8 @@
 import { BarChart } from '@/components/ui/charts/BarChart';
 import { Card } from '@/components/ui/card';
 import { DateRangePicker, type DateRange } from '@/components/ui/date-range-picker';
-import { Spinner } from '@/components/ui/spinner';
-import { useEventActivity } from '../../../hooks/useEventActivity';
+import Spinner from "@/components/ui/spinner"; // Changed to default import
+import { useEventActivity } from '@/hooks/useEventActivity';
 
 interface ActivityTimelineChartProps {
   eventId: string;
@@ -94,4 +94,4 @@ function MetricCard({ title, value, subtitle }: MetricCardProps) {
       <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
     </div>
   );
-} 
+}

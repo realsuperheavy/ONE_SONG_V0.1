@@ -9,6 +9,8 @@
 
 import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
+import * as functions from 'firebase-functions';
+import { webhookService } from '../../src/lib/webhooks/webhookService';
 
 // Export webhooks functions
 export * from "./webhooks";
@@ -18,3 +20,10 @@ export const helloWorld = onRequest((request, response) => {
   logger.info("Hello logs!", { structuredData: true });
   response.send("Hello from Firebase!");
 });
+
+export const handleEventCreated = functions.firestore
+  .document('events/{eventId}')
+  .onCreate(async (snapshot) => {
+    const eventData = snapshot.data();
+    await webhookService.triggerWebhooks('event_created', eventData);
+  });

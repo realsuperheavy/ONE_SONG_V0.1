@@ -1,4 +1,12 @@
-import { useState } from 'react';
+import React, { useState } from "react";
+import {
+  Menu as MenuIcon,
+  X as CloseIcon,
+  Sun as SunIcon,
+  Moon as MoonIcon,
+} from "lucide-react";
+import Logo from "@/components/ui/Logo";
+import NavLink from "@/components/ui/NavLink";
 import { ANIMATIONS, EFFECTS } from '@/design/tokens';
 import { useTheme } from '@/providers/ThemeProvider';
 import { Button } from '../ui/button';

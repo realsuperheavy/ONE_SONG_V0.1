@@ -1,15 +1,12 @@
 // Custom error classes
-export class PlaybackError extends Error {
-  constructor(message: string, public code: string, public metadata?: Record<string, any>) {
-    super(message);
-    this.name = 'PlaybackError';
-  }
-}
+export class AppError extends Error {
+  public code: string;
+  public context?: any;
 
-export class QueueError extends Error {
-  constructor(message: string, public code: string, public metadata?: Record<string, any>) {
-    super(message);
-    this.name = 'QueueError';
+  constructor(params: { code: string; message: string; context?: any }) {
+    super(params.message);
+    this.code = params.code;
+    this.context = params.context;
   }
 }
 
@@ -34,7 +31,7 @@ export const errorRecoveryStrategies = {
 
 // Error boundary utilities
 export const getErrorMessage = (error: Error): string => {
-  if (error instanceof PlaybackError || error instanceof QueueError) {
+  if (error instanceof AppError) {
     return `${error.name} (${error.code}): ${error.message}`;
   }
   return error.message;

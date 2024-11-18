@@ -3,6 +3,7 @@ import { Card } from "../ui/card";
 import { Progress } from "../ui/progress";
 import { formatTime } from "../../lib/utils";
 import { CurrentlyPlayingSkeleton } from "@/components/attendee/CurrentlyPlayingSkeleton";
+import Image from "next/image";
 
 interface CurrentlyPlayingProps {
   eventId: string;
@@ -30,10 +31,13 @@ export function CurrentlyPlaying({ eventId }: CurrentlyPlayingProps) {
       <h2 className="text-lg font-semibold mb-4">Now Playing</h2>
       <div className="flex items-center gap-4">
         {currentTrack.albumArt && (
-          <img
+          <Image
             src={currentTrack.albumArt}
             alt={currentTrack.title}
             className="w-16 h-16 rounded-md"
+            width={64}
+            height={64}
+            layout="fixed"
           />
         )}
         <div className="flex-1">
