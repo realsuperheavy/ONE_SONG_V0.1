@@ -1,7 +1,8 @@
 import dynamic from 'next/dynamic';
+import { FC } from 'react';
 
 // Dynamic component imports
-export const DynamicQRScanner = dynamic(
+export const DynamicQRScanner: FC = dynamic(
   () => import('@/components/QRScannerDialog').then(mod => mod.QRScannerDialog),
   { 
     loading: () => <div>Loading Scanner...</div>,
@@ -9,17 +10,17 @@ export const DynamicQRScanner = dynamic(
   }
 );
 
-export const DynamicAnalytics = dynamic(
+export const DynamicAnalytics: FC = dynamic(
   () => import('@/components/analytics/AnalyticsDisplay'),
   { 
     loading: () => <div>Loading Analytics...</div>
   }
 );
 
-export const DynamicPaymentFlow = dynamic(
+export const DynamicPaymentFlow: FC = dynamic(
   () => import('@/components/payment/PaymentFlow'),
   { 
     loading: () => <div>Loading Payment...</div>,
     ssr: false
   }
-); 
+);

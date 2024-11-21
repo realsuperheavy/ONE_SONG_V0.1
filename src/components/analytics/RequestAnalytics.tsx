@@ -31,7 +31,7 @@ export function RequestAnalytics({ eventId }: RequestAnalyticsProps) {
   const [loading, setLoading] = useState(true);
   const queueManager = useQueueManager(eventId);
   const performanceMonitor = new PerformanceMetricsCollector();
-  const debugger = new FirebaseDebugger(eventId);
+  const firebaseDebugger = new FirebaseDebugger(eventId);
 
   const calculateMetrics = useCallback((queue: any[]) => {
     performanceMonitor.startOperation('calculateMetrics');
@@ -99,7 +99,7 @@ export function RequestAnalytics({ eventId }: RequestAnalyticsProps) {
       setLoading(false);
 
       // Monitor performance
-      const diagnosis = await debugger.diagnoseRealTimeIssue();
+      const diagnosis = await firebaseDebugger.diagnoseRealTimeIssue();
       if (diagnosis.healthStatus !== 'healthy') {
         analyticsService.trackEvent('performance_issue', {
           eventId,
@@ -112,7 +112,7 @@ export function RequestAnalytics({ eventId }: RequestAnalyticsProps) {
       unsubscribe();
       performanceMonitor.dispose();
     };
-  }, [eventId, queueManager, calculateMetrics, debugger]);
+  }, [eventId, queueManager, calculateMetrics, firebaseDebugger]);
 
   if (loading) {
     return (

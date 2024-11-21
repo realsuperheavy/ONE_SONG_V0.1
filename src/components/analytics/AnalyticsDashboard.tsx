@@ -38,7 +38,7 @@ export function AnalyticsDashboard({ eventId }: AnalyticsDashboardProps) {
   const [loading, setLoading] = useState(true);
   const queueManager = useQueueManager(eventId);
   const performanceMonitor = new PerformanceMetricsCollector();
-  const debugger = new FirebaseDebugger(eventId);
+  const firebaseDebugger = new FirebaseDebugger(eventId);
 
   const updateMetrics = useCallback(async (queue: any[]) => {
     performanceMonitor.startOperation('updateMetrics');
@@ -70,7 +70,7 @@ export function AnalyticsDashboard({ eventId }: AnalyticsDashboardProps) {
 
       // Get performance metrics
       const perfMetrics = performanceMonitor.getMetrics();
-      const diagnosis = await debugger.diagnoseRealTimeIssue();
+      const diagnosis = await firebaseDebugger.diagnoseRealTimeIssue();
 
       setMetrics({
         requestTrends: hourlyRequests,
@@ -96,7 +96,7 @@ export function AnalyticsDashboard({ eventId }: AnalyticsDashboardProps) {
         eventId
       });
     }
-  }, [eventId, performanceMonitor, debugger]);
+  }, [eventId, performanceMonitor, firebaseDebugger]);
 
   useEffect(() => {
     const unsubscribe = queueManager.subscribeToQueue(async (queue) => {

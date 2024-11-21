@@ -4,24 +4,44 @@ import { Progress } from "../ui/progress";
 import { formatTime } from "../../lib/utils";
 import { CurrentlyPlayingSkeleton } from "@/components/attendee/CurrentlyPlayingSkeleton";
 import Image from "next/image";
+import type { Track } from "@/types/components";
 
 interface CurrentlyPlayingProps {
   eventId: string;
+}
+
+interface CurrentTrackData {
+  currentTrack: Track | null;
+  progress: number;
+  error?: Error;
 }
 
 export function CurrentlyPlaying({ eventId }: CurrentlyPlayingProps) {
   const { 
     currentTrack, 
     progress, 
-    isLoading 
-  } = useCurrentTrack(eventId);
+    isLoading,
+    error 
+  } = useCurrentTrack(eventId) as CurrentTrackData;
 
   if (isLoading) {
     return <CurrentlyPlayingSkeleton />;
   }
 
+  if (error) {
+    return (
+      <Card className="p-4">
+        <p className="text-destructive">Failed to load current track: {error.message}</p>
+      </Card>
+    );
+  }
+
   if (!currentTrack) {
-    return null;
+    return (
+      <Card className="p-4">
+        <p className="text-muted-foreground text-center">No track currently playing</p>
+      </Card>
+    );
   }
 
   const progressPercent = (progress / currentTrack.duration) * 100;
@@ -33,11 +53,11 @@ export function CurrentlyPlaying({ eventId }: CurrentlyPlayingProps) {
         {currentTrack.albumArt && (
           <Image
             src={currentTrack.albumArt}
-            alt={currentTrack.title}
+            alt={`${currentTrack.title} album art`}
             className="w-16 h-16 rounded-md"
             width={64}
             height={64}
-            layout="fixed"
+            priority
           />
         )}
         <div className="flex-1">

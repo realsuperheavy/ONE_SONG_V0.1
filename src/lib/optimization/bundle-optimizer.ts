@@ -1,7 +1,15 @@
 import dynamic from 'next/dynamic';
+import { FC } from 'react';
+
+interface DynamicComponents {
+  QRScanner: FC;
+  AnalyticsView: FC;
+  PaymentFlow: FC;
+  SpotifyPlayer: FC;
+}
 
 // Dynamic imports for route-based code splitting
-export const dynamicImports = {
+export const dynamicImports: DynamicComponents = {
   // Guest Features
   QRScanner: dynamic(() => import('@/components/qr/QRScanner'), {
     ssr: false,
@@ -27,8 +35,8 @@ export const dynamicImports = {
 };
 
 // Preload critical components
-export const preloadCriticalComponents = () => {
-  const preloadComponent = (path: string) => {
+export const preloadCriticalComponents = (): void => {
+  const preloadComponent = (path: string): void => {
     const link = document.createElement('link');
     link.rel = 'modulepreload';
     link.href = path;
@@ -38,4 +46,4 @@ export const preloadCriticalComponents = () => {
   // Preload critical paths
   preloadComponent('/components/queue/QueueView');
   preloadComponent('/components/song-request/RequestForm');
-}; 
+};
